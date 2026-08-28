@@ -7,7 +7,7 @@ import { mockCityData } from './src/mock-data.mjs';
 import { normalizeSeoulCityData } from './src/seoul-adapter.mjs';
 import { parseSeoulXml } from './src/seoul-xml.mjs';
 import { fetchKmaForecast, mergeKmaIntoSlots } from './src/kma-adapter.mjs';
-import { makeVerdict } from './src/engine.mjs';
+import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
 
@@ -108,7 +108,7 @@ async function getCityData(place) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') return json(res, 200, {
-    ok:true, version:'0.6.0', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
+    ok:true, version:'0.6.1', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
   });
   if (url.pathname === '/api/places') return json(res, 200, PLACES);
   if (url.pathname === '/api/city' || url.pathname === '/api/verdict') {
@@ -118,7 +118,7 @@ async function handleApi(req, res, url) {
     if (url.pathname === '/api/city') return json(res, 200, { ...data, quality: assessDataQuality(data) });
 
     const intent = url.searchParams.get('intent') || 'general';
-    const verdict = makeVerdict({
+    const verdict = makeProductVerdict({
       place, slots: data.slots, sunset: data.sunset, nowTime: data.nowTime, current: data.current, intent
     });
     return json(res, 200, {
@@ -165,4 +165,22 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404, SECURITY_HEADERS); res.end('Not found');
 });
 
-server.listen(PORT, () => console.log(`언제 v0.6.0 → http://localhost:${PORT}`));
+function listenWithFallback(port = PORT, attempt = 0) {
+  const maxAttempts = 10;
+  const onError = (error) => {
+    if (error?.code === 'EADDRINUSE' && attempt < maxAttempts) {
+      const nextPort = port + 1;
+      console.warn(`포트 ${port} 사용 중 → ${nextPort}로 재시도`);
+      setTimeout(() => listenWithFallback(nextPort, attempt + 1), 0);
+      return;
+    }
+    throw error;
+  };
+  server.once('error', onError);
+  server.listen(port, () => {
+    server.removeListener('error', onError);
+    console.log(`언제 v0.6.1 → http://localhost:${port}`);
+  });
+}
+
+listenWithFallback();

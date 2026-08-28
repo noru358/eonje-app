@@ -46,6 +46,7 @@ export function toIsoSeoul(value, referenceDate = new Date()) {
     const x = s.replace(/\s/g, '');
     return `${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}T${x.slice(8,10)}:${x.slice(10,12)}:00+09:00`;
   }
+  // SUNSET/SUNRISE may be HH:MM only. Anchor it to the current Seoul date.
   if (/^\d{1,2}:\d{2}$/.test(s)) {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(referenceDate);
     const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
@@ -56,6 +57,7 @@ export function toIsoSeoul(value, referenceDate = new Date()) {
 }
 
 function findCityRow(payload) {
+  // Seoul XML converted to JSON commonly uses a literal dotted root key.
   const dotted = payload?.['SeoulRtd.citydata'];
   if (dotted?.CITYDATA) return Array.isArray(dotted.CITYDATA) ? dotted.CITYDATA[0] : dotted.CITYDATA;
   const candidates = [
@@ -84,6 +86,7 @@ function nearestPopulation(popForecast, weatherIso) {
     const d = Math.abs(new Date(iso).getTime() - target);
     if (d < delta) { delta = d; best = item; }
   }
+  // Do not marry unrelated forecast points.
   return delta <= 45 * 60 * 1000 ? best : null;
 }
 
@@ -100,7 +103,7 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   const popForecast = asArray(popForecastRaw).filter(Boolean);
   const weatherForecast = asArray(weatherForecastRaw).filter(Boolean);
 
-  const slots = weatherForecast.slice(0, 12).map((f) => {
+  const slots = weatherForecast.slice(0, 24).map((f) => {
     const time = toIsoSeoul(f.FCST_DT || f.FCST_TIME, referenceDate);
     const p = nearestPopulation(popForecast, time);
     return {
@@ -108,12 +111,21 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
       temp: parseNum(f.TEMP, parseNum(weather.TEMP, 24)),
       rainChance: parseNum(f.RAIN_CHANCE, 0),
       precipitation: parseNum(f.PRECIPITATION, 0),
-      wind: parseNum(weather.WIND_SPD, 2),
+      // Seoul citydata provides hourly temperature/rain, but wind/air/UV are current observations.
+      // Do not pretend the current wind is an hourly forecast. KMA can fill wind later.
+      wind: null,
       pm25: parseNum(weather.PM25, 20),
       pm10: parseNum(weather.PM10, 35),
       uv: parseNum(weather.UV_INDEX, 0),
-      crowd: normalizeCrowd(p?.FCST_CONGEST_LVL || live.AREA_CONGEST_LVL),
-      eventImpact: 0
+      crowd: p ? normalizeCrowd(p.FCST_CONGEST_LVL) : null,
+      eventImpact: 0,
+      provenance: {
+        weather: 'seoul_hourly_forecast',
+        wind: 'missing_until_kma',
+        air: 'current_observation',
+        uv: 'current_observation',
+        crowd: p ? 'seoul_population_forecast' : 'unknown'
+      }
     };
   }).filter((x) => x.time);
 

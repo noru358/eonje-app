@@ -108,12 +108,18 @@ export function mergeKmaIntoSlots(slots, kma) {
       if (d < delta) { delta = d; best = k; }
     }
     if (!best || delta > 31 * 60 * 1000) return slot;
+    const hasWind = Number.isFinite(best.wind);
     return {
       ...slot,
       temp: best.temp,
       rainChance: best.rainChance,
       precipitation: best.precipitation,
-      wind: Number.isFinite(best.wind) ? best.wind : slot.wind,
+      wind: hasWind ? best.wind : slot.wind,
+      provenance: {
+        ...(slot.provenance || {}),
+        weather: 'kma_hourly_forecast',
+        wind: hasWind ? 'kma_hourly_forecast' : (slot.provenance?.wind || 'missing')
+      },
       weatherSource: 'KMA'
     };
   });

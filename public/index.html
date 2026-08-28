@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f3f4ef" />
+  <meta name="description" content="기온, 비, 바람, 혼잡도와 일몰을 한 번에 비교해 오늘 한강에 갈 시간을 정해주는 서비스." />
+  <title>언제 — 오늘 한강 언제 가지?</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-state="loading">
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="언제 홈">언제</a>
+      <button class="icon-button" id="infoButton" aria-label="언제 소개">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10.7v5.3M12 7.6h.01"/></svg>
+      </button>
+    </header>
+
+    <section class="question-block" aria-labelledby="questionLabel">
+      <p class="question" id="questionLabel">오늘 한강 언제 가지?</p>
+      <button class="place-trigger" id="placeButton" type="button" aria-haspopup="dialog">
+        <span class="place-pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+        </span>
+        <span id="placeName">여의도한강공원</span>
+        <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
+      </button>
+    </section>
+
+    <section class="answer" id="answer" aria-live="polite" aria-busy="true">
+      <div class="freshness-row">
+        <span class="live-pill" id="modeLabel"><i></i><span>불러오는 중</span></span>
+        <span class="updated" id="updatedLabel"></span>
+      </div>
+
+      <div class="answer-main">
+        <h1 id="headline">오늘 갈 시간을 고르는 중</h1>
+        <p class="answer-time skeleton-text" id="windowLabel">19:00–20:00</p>
+        <p class="subhead" id="subhead">날씨와 혼잡도를 함께 비교하고 있다.</p>
+      </div>
+
+      <div class="reason-stack" id="reasons" aria-label="추천 이유"></div>
+
+      <div class="action-row" id="actionRow">
+        <button class="primary-action" id="calendarButton" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="3"/><path d="M8 3.5v4M16 3.5v4M4 9.5h16"/></svg>
+          <span>캘린더에 넣기</span>
+        </button>
+        <button class="secondary-action" id="shareButton" type="button" aria-label="결과 공유하기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M6 11v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7"/></svg>
+        </button>
+      </div>
+
+      <button class="why-button" id="whyButton" type="button" aria-expanded="false" aria-controls="details">
+        <span>왜 이 시간이야?</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
+      </button>
+    </section>
+
+    <section class="details" id="details" hidden>
+      <div class="details-head">
+        <div>
+          <p class="section-kicker">판단 근거</p>
+          <h2>시간마다 이 조건들을 같이 봤다.</h2>
+        </div>
+        <span class="confidence" id="confidence">근거 확인 중</span>
+      </div>
+
+      <div class="timeline-wrap">
+        <div class="timeline-labels">
+          <span>오늘 남은 시간</span>
+          <span id="bestHint">추천 시간 표시</span>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+      <div class="detail-summary" id="detailSummary"></div>
+      <p class="data-note" id="dataNote">추천 점수는 내부 판단에만 쓰고, 첫 화면에는 결론만 보여준다.</p>
+    </section>
+
+    <section class="error-panel" id="errorPanel" hidden>
+      <p class="section-kicker">연결 문제</p>
+      <h2>데이터를 가져오지 못했다.</h2>
+      <p id="errorMessage">잠시 뒤 다시 시도해 달라.</p>
+      <button class="retry-button" id="retryButton" type="button">다시 불러오기</button>
+    </section>
+
+    <footer>
+      <p id="sourceLabel">서울특별시 실시간 도시데이터 기반</p>
+      <p>추천은 실제 상황과 다를 수 있다. 악천후·안전 특보가 있으면 현장 안내를 우선한다.</p>
+    </footer>
+  </main>
+
+  <dialog class="sheet" id="placeDialog" aria-labelledby="placeDialogTitle">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <div>
+        <p class="section-kicker">장소 선택</p>
+        <h2 id="placeDialogTitle">어느 한강공원 갈까?</h2>
+      </div>
+      <button class="icon-button" id="placeClose" type="button" aria-label="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+      </button>
+    </div>
+    <div class="place-list" id="placeList"></div>
+  </dialog>
+
+  <dialog class="info-dialog" id="infoDialog" aria-labelledby="infoTitle">
+    <button class="icon-button dialog-close" id="dialogClose" type="button" aria-label="닫기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+    </button>
+    <p class="section-kicker">언제</p>
+    <h2 id="infoTitle">날씨를 보여주는 대신<br>나갈 시간을 정해준다.</h2>
+    <p>기온, 비, 바람, 대기질, 일몰, 혼잡 예측을 한꺼번에 비교해서 오늘 가장 나은 시간만 먼저 보여준다.</p>
+    <div class="principle-list">
+      <span>결론 먼저</span><span>이유는 세 개만</span><span>원하면 근거 공개</span>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

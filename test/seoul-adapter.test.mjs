@@ -41,3 +41,40 @@ test('normalizes dotted Seoul root and nested repeated tags', () => {
   assert.equal(r.slots[0].rainChance, 20);
   assert.match(r.sunset, /19:07/);
 });
+
+test('normalizes Seoul JSON arrays around city/weather/population sections', () => {
+  const arrayFixture = {
+    'SeoulRtd.citydata': {
+      CITYDATA: [{
+        AREA_NM: '여의도한강공원',
+        LIVE_PPLTN_STTS: [{
+          AREA_CONGEST_LVL: '약간 붐빔',
+          PPLTN_TIME: '2026-08-28 18:00',
+          FCST_PPLTN: [{ FCST_TIME:'2026-08-28 19:00', FCST_CONGEST_LVL:'보통' }]
+        }],
+        WEATHER_STTS: [{
+          TEMP:'28', WIND_SPD:'2.5', PM25:'21', PM10:'39', UV_INDEX:'1', SUNSET:'19:07', WEATHER_TIME:'2026-08-28 18:00',
+          FCST24HOURS: [
+            { FCST_DT:'202608281900', TEMP:'26', PRECIPITATION:'0', RAIN_CHANCE:'20' },
+            { FCST_DT:'202608282000', TEMP:'25', PRECIPITATION:'0', RAIN_CHANCE:'30' }
+          ]
+        }]
+      }]
+    }
+  };
+  const r = normalizeSeoulCityData(arrayFixture, { referenceDate:new Date('2026-08-28T09:00:00Z') });
+  assert.equal(r.slots.length, 2);
+  assert.equal(r.slots[0].crowd, '보통');
+  assert.equal(r.slots[0].temp, 26);
+  assert.equal(r.slots[0].rainChance, 20);
+});
+
+test('normalizes repeated wrappers even when wrapped by arrays', () => {
+  const mixedFixture = structuredClone(fixture);
+  const row = mixedFixture['SeoulRtd.citydata'].CITYDATA;
+  row.LIVE_PPLTN_STTS = [row.LIVE_PPLTN_STTS];
+  row.WEATHER_STTS = [row.WEATHER_STTS];
+  row.WEATHER_STTS[0].WEATHER_STTS.FCST24HOURS = [row.WEATHER_STTS[0].WEATHER_STTS.FCST24HOURS];
+  const r = normalizeSeoulCityData(mixedFixture, { referenceDate:new Date('2026-08-28T09:00:00Z') });
+  assert.equal(r.slots.length, 2);
+});

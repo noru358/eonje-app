@@ -47,9 +47,11 @@ export function sanitizeVerdict(verdict, data = {}) {
   if (!hasKnownCrowd(best)) missing.push('추천 시간 혼잡 예측 없음');
   if (!Number.isFinite(best?.wind)) missing.push('시간별 풍속 예보 없음');
 
-  // Crowd is 34% of the utility score. A missing value there cannot support
-  // a "high" confidence label even when weather/experience are excellent.
-  if (!hasKnownCrowd(best) && next.confidence === '높음') next.confidence = '보통';
+  // Crowd is 34% of utility, and weather includes wind. Missing either materially
+  // weakens a "high confidence" claim even if the available components score well.
+  if ((!hasKnownCrowd(best) || !Number.isFinite(best?.wind)) && next.confidence === '높음') {
+    next.confidence = '보통';
+  }
   if (missing.length) next.confidenceDetail = appendDetail(next.confidenceDetail, missing.join(' · '));
 
   return next;

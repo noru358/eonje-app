@@ -70,6 +70,40 @@ function chooseGo(a, b) {
   return a || b;
 }
 
+function compressPrimaryWindow(verdict) {
+  if (verdict?.status !== 'go' || !Array.isArray(verdict.scored) || !verdict.best?.time) return verdict;
+  const bestIndex = verdict.scored.findIndex((slot) => slot.time === verdict.best.time);
+  if (bestIndex < 0) return verdict;
+
+  const best = verdict.scored[bestIndex];
+  const neighbors = [bestIndex - 1, bestIndex + 1]
+    .filter((i) => i >= 0 && i < verdict.scored.length)
+    .map((i) => ({ index:i, slot:verdict.scored[i] }))
+    .filter(({ slot }) => !slot.gated && Number.isFinite(slot.score) && best.score - slot.score <= 4.0)
+    .sort((a, b) => b.slot.score - a.slot.score);
+
+  let start = best.time;
+  let end = new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString();
+  if (neighbors.length) {
+    const neighbor = neighbors[0];
+    if (neighbor.index < bestIndex) {
+      start = neighbor.slot.time;
+      end = new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString();
+    } else {
+      start = best.time;
+      end = new Date(new Date(neighbor.slot.time).getTime() + 60 * 60 * 1000).toISOString();
+    }
+  }
+
+  return {
+    ...verdict,
+    start,
+    end,
+    windowLabel:`${timeLabel(start)}–${timeLabel(end)}`,
+    subhead:`${verdict.place?.shortName || ''}: ${timeLabel(start)}부터가 오늘의 답.`
+  };
+}
+
 export function makeProductVerdict({ place, slots, sunset, nowTime, current = null, intent = 'general' }) {
   if (!slots?.length) throw new Error('slots are required');
   const nowIso = nowTime || current?.time || slots[0].time;
@@ -96,6 +130,7 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
     verdict = makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent });
   }
 
-  const disclosed = withConfidenceDisclosure(headlineFromActualNow(verdict, nowIso));
+  const compact = compressPrimaryWindow(verdict);
+  const disclosed = withConfidenceDisclosure(headlineFromActualNow(compact, nowIso));
   return sanitizeVerdict(disclosed, { current });
 }

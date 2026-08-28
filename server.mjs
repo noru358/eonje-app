@@ -8,9 +8,12 @@ import { normalizeSeoulCityData } from './src/seoul-adapter.mjs';
 import { parseSeoulXml } from './src/seoul-xml.mjs';
 import { fetchKmaForecast, mergeKmaIntoSlots } from './src/kma-adapter.mjs';
 import { makeVerdict } from './src/engine.mjs';
+import { assessDataQuality } from './src/data-quality.mjs';
+import { loadEnvFile } from './src/env.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
+loadEnvFile(join(ROOT, '.env'));
 const PORT = Number(process.env.PORT || 4173);
 const SEOUL_API_KEY = process.env.SEOUL_API_KEY || '';
 const DATA_GO_KR_API_KEY = process.env.DATA_GO_KR_API_KEY || '';
@@ -20,11 +23,18 @@ const SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || join(ROOT, 'data', 'snapshots')
 const mime = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml'
+  '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml'
+};
+
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'same-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'content-security-policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 };
 
 function json(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
 }
 
@@ -57,7 +67,6 @@ async function persistSnapshot(place, data) {
   };
   await appendFile(file, `${JSON.stringify(record)}\n`, 'utf8');
   snapshotBuckets.add(dedupeKey);
-
   if (snapshotBuckets.size > 2000) snapshotBuckets.clear();
 }
 
@@ -65,8 +74,6 @@ async function fetchReal(place) {
   const cached = liveCache.get(place.id);
   if (cached && Date.now() - cached.at < 60_000) return cached.data;
 
-  // Korean citydata officially exposes XML. Request XML, parse it server-side,
-  // then pass the stable object shape to the existing normalizer.
   const area = encodeURIComponent(place.name);
   const url = `http://openapi.seoul.go.kr:8088/${SEOUL_API_KEY}/xml/citydata/1/5/${area}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(7000) });
@@ -91,30 +98,35 @@ async function fetchReal(place) {
 }
 
 async function getCityData(place) {
-  if (!SEOUL_API_KEY) return { ...mockCityData(place.id), source: 'DEMO — 서울시 API 키 연결 전' };
+  if (!SEOUL_API_KEY) return { ...mockCityData(place.id, new Date()), source: 'DEMO — 서울시 API 키 연결 전' };
   try {
     return await fetchReal(place);
   } catch (error) {
-    return { ...mockCityData(place.id), source: 'DEMO fallback', liveError: error.message };
+    return { ...mockCityData(place.id, new Date()), source: 'DEMO fallback', liveError: error.message };
   }
 }
 
 async function handleApi(req, res, url) {
+  if (url.pathname === '/api/health') return json(res, 200, {
+    ok:true, version:'0.6.0', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
+  });
   if (url.pathname === '/api/places') return json(res, 200, PLACES);
   if (url.pathname === '/api/city' || url.pathname === '/api/verdict') {
     const id = url.searchParams.get('place') || 'yeouido';
     const place = PLACES.find((p) => p.id === id) || PLACES[0];
     const data = await getCityData(place);
-    if (url.pathname === '/api/city') return json(res, 200, data);
+    if (url.pathname === '/api/city') return json(res, 200, { ...data, quality: assessDataQuality(data) });
 
+    const intent = url.searchParams.get('intent') || 'general';
     const verdict = makeVerdict({
-      place, slots: data.slots, sunset: data.sunset, nowTime: data.nowTime, current: data.current
+      place, slots: data.slots, sunset: data.sunset, nowTime: data.nowTime, current: data.current, intent
     });
     return json(res, 200, {
       place,
       data: {
         mode: data.mode, source: data.source, updatedAt: data.updatedAt, nowTime: data.nowTime,
-        liveError: data.liveError || null, kmaError: data.kmaError || null
+        liveError: data.liveError || null, kmaError: data.kmaError || null,
+        quality: assessDataQuality(data)
       },
       verdict
     });
@@ -131,7 +143,8 @@ async function serveStatic(req, res, pathname) {
     const st = await stat(file);
     if (!st.isFile()) return false;
     const body = await readFile(file);
-    res.writeHead(200, { 'content-type': mime[extname(file)] || 'application/octet-stream' });
+    const cacheControl = extname(file) === '.html' ? 'no-cache' : 'public, max-age=300';
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': mime[extname(file)] || 'application/octet-stream', 'cache-control': cacheControl });
     res.end(body);
     return true;
   } catch { return false; }
@@ -142,14 +155,14 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/module/')) {
     const modPath = url.pathname.replace('/module/', '');
     const file = join(ROOT, 'src', modPath);
-    try { const body = await readFile(file); res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(body); return; } catch {}
+    try { const body = await readFile(file); res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control':'public, max-age=300' }); res.end(body); return; } catch {}
   }
   if (url.pathname.startsWith('/api/')) {
     const handled = await handleApi(req, res, url);
     if (handled !== false) return;
   }
   if (await serveStatic(req, res, url.pathname)) return;
-  res.writeHead(404); res.end('Not found');
+  res.writeHead(404, SECURITY_HEADERS); res.end('Not found');
 });
 
-server.listen(PORT, () => console.log(`언제 live-data v0.6 → http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`언제 v0.6.0 → http://localhost:${PORT}`));

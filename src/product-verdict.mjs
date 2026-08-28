@@ -1,12 +1,10 @@
 import { makeVerdict } from './engine.mjs';
 import { sanitizeVerdict } from './verdict-sanitizer.mjs';
 
-const KNOWN_CROWD = new Set(['여유', '보통', '약간 붐빔', '붐빔']);
-
 function seoulParts(iso) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', hourCycle:'h23'
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'
   }).formatToParts(new Date(iso));
   return Object.fromEntries(parts.map((p) => [p.type, p.value]));
 }
@@ -24,6 +22,11 @@ function timeLabel(iso) {
   return new Intl.DateTimeFormat('ko-KR', {
     hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Seoul'
   }).format(new Date(iso));
+}
+
+function toSeoulIso(iso) {
+  const p = seoulParts(iso);
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}+09:00`;
 }
 
 function nextDateKey(iso) {
@@ -49,19 +52,6 @@ function headlineFromActualNow(verdict, nowIso) {
   return { ...verdict, headline };
 }
 
-function withConfidenceDisclosure(verdict) {
-  if (verdict?.status !== 'go') return verdict;
-  const missing = [];
-  if (!Number.isFinite(verdict.best?.wind)) missing.push('시간별 풍속');
-  if (!KNOWN_CROWD.has(verdict.best?.crowd)) missing.push('해당 시간대 혼잡');
-  if (!missing.length) return { ...verdict, confidenceDetail: null };
-  return {
-    ...verdict,
-    confidence: verdict.confidence === '높음' ? '보통' : verdict.confidence,
-    confidenceDetail: `${missing.join('·')} 예보가 없어 확신도를 보수적으로 봐야 한다.`
-  };
-}
-
 function chooseGo(a, b) {
   if (a?.status === 'go' && b?.status === 'go') return (a.best?.score ?? -Infinity) >= (b.best?.score ?? -Infinity) ? a : b;
   if (a?.status === 'go') return a;
@@ -83,15 +73,15 @@ function compressPrimaryWindow(verdict) {
     .sort((a, b) => b.slot.score - a.slot.score);
 
   let start = best.time;
-  let end = new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString();
+  let end = toSeoulIso(new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString());
   if (neighbors.length) {
     const neighbor = neighbors[0];
     if (neighbor.index < bestIndex) {
       start = neighbor.slot.time;
-      end = new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString();
+      end = toSeoulIso(new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString());
     } else {
       start = best.time;
-      end = new Date(new Date(neighbor.slot.time).getTime() + 60 * 60 * 1000).toISOString();
+      end = toSeoulIso(new Date(new Date(neighbor.slot.time).getTime() + 60 * 60 * 1000).toISOString());
     }
   }
 
@@ -102,6 +92,20 @@ function compressPrimaryWindow(verdict) {
     windowLabel:`${timeLabel(start)}–${timeLabel(end)}`,
     subhead:`${verdict.place?.shortName || ''}: ${timeLabel(start)}부터가 오늘의 답.`
   };
+}
+
+function explainWindow(verdict, sunset) {
+  if (verdict?.status !== 'go' || !verdict.start || !verdict.end || !sunset) return verdict;
+  const startMs = new Date(verdict.start).getTime();
+  const endMs = new Date(verdict.end).getTime();
+  const sunsetMs = new Date(sunset).getTime();
+  if (![startMs, endMs, sunsetMs].every(Number.isFinite) || sunsetMs < startMs || sunsetMs > endMs) return verdict;
+
+  const reasons = Array.isArray(verdict.reasons) ? [...verdict.reasons] : [];
+  if (!reasons.some((reason) => reason?.icon === 'sun')) {
+    reasons.unshift({ icon:'sun', title:'해질 무렵과 겹침', detail:`일몰 ${timeLabel(sunset)}` });
+  }
+  return { ...verdict, reasons:reasons.slice(0, 3) };
 }
 
 export function makeProductVerdict({ place, slots, sunset, nowTime, current = null, intent = 'general' }) {
@@ -131,6 +135,6 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
   }
 
   const compact = compressPrimaryWindow(verdict);
-  const disclosed = withConfidenceDisclosure(headlineFromActualNow(compact, nowIso));
-  return sanitizeVerdict(disclosed, { current });
+  const explained = explainWindow(headlineFromActualNow(compact, nowIso), sunset);
+  return sanitizeVerdict(explained, { current });
 }

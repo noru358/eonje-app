@@ -1,4 +1,7 @@
 import { makeVerdict } from './engine.mjs';
+import { sanitizeVerdict } from './verdict-sanitizer.mjs';
+
+const KNOWN_CROWD = new Set(['여유', '보통', '약간 붐빔', '붐빔']);
 
 function seoulParts(iso) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -50,7 +53,7 @@ function withConfidenceDisclosure(verdict) {
   if (verdict?.status !== 'go') return verdict;
   const missing = [];
   if (!Number.isFinite(verdict.best?.wind)) missing.push('시간별 풍속');
-  if (verdict.best?.crowd === 'unknown') missing.push('해당 시간대 혼잡');
+  if (!KNOWN_CROWD.has(verdict.best?.crowd)) missing.push('해당 시간대 혼잡');
   if (!missing.length) return { ...verdict, confidenceDetail: null };
   return {
     ...verdict,
@@ -93,5 +96,6 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
     verdict = makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent });
   }
 
-  return withConfidenceDisclosure(headlineFromActualNow(verdict, nowIso));
+  const disclosed = withConfidenceDisclosure(headlineFromActualNow(verdict, nowIso));
+  return sanitizeVerdict(disclosed, { current });
 }

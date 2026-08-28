@@ -91,9 +91,14 @@ async function fetchReal(place) {
       normalized = { ...normalized, kmaError: error.message };
     }
   }
-  const data = { ...normalized, mode: 'live', source: weatherSource };
+  let data = { ...normalized, mode: 'live', source: weatherSource };
+  try {
+    await persistSnapshot(place, data);
+  } catch (error) {
+    console.error(`Snapshot persistence failed for ${place.id}:`, error);
+    data = { ...data, snapshotError:error.message };
+  }
   liveCache.set(place.id, { at: Date.now(), data });
-  await persistSnapshot(place, data);
   return data;
 }
 
@@ -108,25 +113,27 @@ async function getCityData(place) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') return json(res, 200, {
-    ok:true, version:'0.6.1', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
+    ok:true, version:'0.6.2', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
   });
   if (url.pathname === '/api/places') return json(res, 200, PLACES);
   if (url.pathname === '/api/city' || url.pathname === '/api/verdict') {
     const id = url.searchParams.get('place') || 'yeouido';
-    const place = PLACES.find((p) => p.id === id) || PLACES[0];
+    const place = PLACES.find((p) => p.id === id);
+    if (!place) return json(res, 400, { error:'invalid_place', message:`지원하지 않는 장소: ${id}` });
     const data = await getCityData(place);
-    if (url.pathname === '/api/city') return json(res, 200, { ...data, quality: assessDataQuality(data) });
+    const quality = assessDataQuality(data);
+    if (url.pathname === '/api/city') return json(res, 200, { ...data, quality });
 
     const intent = url.searchParams.get('intent') || 'general';
     const verdict = makeProductVerdict({
-      place, slots: data.slots, sunset: data.sunset, nowTime: data.nowTime, current: data.current, intent
+      place, slots: data.slots, sunset: data.sunset, nowTime: data.nowTime, current: data.current, intent, quality
     });
     return json(res, 200, {
       place,
       data: {
         mode: data.mode, source: data.source, updatedAt: data.updatedAt, nowTime: data.nowTime,
         liveError: data.liveError || null, kmaError: data.kmaError || null,
-        quality: assessDataQuality(data)
+        quality
       },
       verdict
     });
@@ -151,24 +158,35 @@ async function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  if (url.pathname.startsWith('/module/')) {
-    const modPath = url.pathname.replace('/module/', '');
-    const file = join(ROOT, 'src', modPath);
-    try { const body = await readFile(file); res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control':'public, max-age=300' }); res.end(body); return; } catch {}
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname.startsWith('/module/')) {
+      const modPath = url.pathname.replace('/module/', '');
+      const file = join(ROOT, 'src', modPath);
+      try { const body = await readFile(file); res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control':'public, max-age=300' }); res.end(body); return; } catch {}
+    }
+    if (url.pathname.startsWith('/api/')) {
+      const handled = await handleApi(req, res, url);
+      if (handled !== false) return;
+    }
+    if (await serveStatic(req, res, url.pathname)) return;
+    res.writeHead(404, SECURITY_HEADERS); res.end('Not found');
+  } catch (error) {
+    console.error(error);
+    if (!res.headersSent) json(res, 500, { error:'internal_error', message:'데이터를 처리하지 못했다.' });
+    else res.end();
   }
-  if (url.pathname.startsWith('/api/')) {
-    const handled = await handleApi(req, res, url);
-    if (handled !== false) return;
-  }
-  if (await serveStatic(req, res, url.pathname)) return;
-  res.writeHead(404, SECURITY_HEADERS); res.end('Not found');
 });
 
 function listenWithFallback(port = PORT, attempt = 0) {
   const maxAttempts = 10;
+  const onListening = () => {
+    server.removeListener('error', onError);
+    console.log(`언제 v0.6.2 → http://localhost:${port}`);
+  };
   const onError = (error) => {
     if (error?.code === 'EADDRINUSE' && attempt < maxAttempts) {
+      server.removeListener('listening', onListening);
       const nextPort = port + 1;
       console.warn(`포트 ${port} 사용 중 → ${nextPort}로 재시도`);
       setTimeout(() => listenWithFallback(nextPort, attempt + 1), 0);
@@ -177,10 +195,8 @@ function listenWithFallback(port = PORT, attempt = 0) {
     throw error;
   };
   server.once('error', onError);
-  server.listen(port, () => {
-    server.removeListener('error', onError);
-    console.log(`언제 v0.6.1 → http://localhost:${port}`);
-  });
+  server.once('listening', onListening);
+  server.listen(port);
 }
 
 listenWithFallback();

@@ -43,7 +43,9 @@ export function parseXml(xml) {
     }
     if (token.startsWith('</')) {
       if (stack.length === 1) throw new Error('Malformed Seoul XML: unexpected closing tag');
+      const closingName = token.slice(2, -1).trim();
       const node = stack.pop();
+      if (closingName !== node.name) throw new Error(`Malformed Seoul XML: expected </${node.name}> but found </${closingName}>`);
       addValue(stack[stack.length - 1].children, node.name, collapse(node));
       continue;
     }

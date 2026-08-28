@@ -8,6 +8,7 @@ export const CROWD_SCORE = {
 };
 
 function tempScore(t) {
+  if (!Number.isFinite(t)) return 70;
   if (t >= 20 && t <= 26) return 100;
   if (t >= 17 && t < 20) return 90 - (20 - t) * 4;
   if (t > 26 && t <= 29) return 92 - (t - 26) * 9;
@@ -32,10 +33,15 @@ function windScore(wind) {
   return 10;
 }
 
-function rainScore(chance = 0, precipitation = 0) {
-  const chancePenalty = chance * 0.62;
-  const amountPenalty = Math.min(55, precipitation * 22);
-  return clamp(100 - chancePenalty - amountPenalty);
+function rainScore(chance, precipitation) {
+  const hasChance = Number.isFinite(chance);
+  const hasAmount = Number.isFinite(precipitation);
+  if (hasChance && hasAmount) return clamp(100 - chance * 0.62 - Math.min(55, precipitation * 22));
+  if (!hasChance && !hasAmount) return 70;
+  const knownScore = hasChance
+    ? clamp(100 - chance * 0.62)
+    : clamp(100 - Math.min(55, precipitation * 22));
+  return (knownScore + 70) / 2;
 }
 
 function uvScore(uv = 0) {
@@ -88,11 +94,11 @@ function timePreferenceAdjustment(slot, intent = 'general') {
 
 export function hardGate(slot) {
   if (slot.warning === 'severe') return '기상특보';
-  if ((slot.rainChance ?? 0) >= 70 && (slot.precipitation ?? 0) >= 0.5) return '비 가능성 높음';
-  if ((slot.precipitation ?? 0) >= 2) return '강한 비';
-  if ((slot.temp ?? 23) >= 33) return '너무 더움';
-  if ((slot.temp ?? 23) <= -5) return '너무 추움';
-  if ((slot.pm25 ?? 20) >= 76 || (slot.pm10 ?? 35) >= 151) return '대기질 나쁨';
+  if (Number.isFinite(slot.rainChance) && Number.isFinite(slot.precipitation) && slot.rainChance >= 70 && slot.precipitation >= 0.5) return '비 가능성 높음';
+  if (Number.isFinite(slot.precipitation) && slot.precipitation >= 2) return '강한 비';
+  if (Number.isFinite(slot.temp) && slot.temp >= 33) return '너무 더움';
+  if (Number.isFinite(slot.temp) && slot.temp <= -5) return '너무 추움';
+  if ((Number.isFinite(slot.pm25) && slot.pm25 >= 76) || (Number.isFinite(slot.pm10) && slot.pm10 >= 151)) return '대기질 나쁨';
   if (Number.isFinite(slot.wind) && slot.wind >= 11) return '바람이 너무 강함';
   return null;
 }
@@ -149,7 +155,9 @@ function crowdRank(crowd) {
 
 function buildReasons(best, now, context) {
   const reasons = [];
-  if (now && crowdRank(best.crowd) + 1 <= crowdRank(now.crowd)) {
+  const bestCrowdRank = crowdRank(best.crowd);
+  const nowCrowdRank = crowdRank(now?.crowd);
+  if (bestCrowdRank >= 0 && nowCrowdRank >= 0 && bestCrowdRank + 1 <= nowCrowdRank) {
     reasons.push({ icon: 'people', title: '지금보다 한산해짐', detail: `${now.crowd} → ${best.crowd}` });
   } else if (best.crowd === '여유' || best.crowd === '보통') {
     reasons.push({ icon: 'people', title: '사람이 덜 붐빔', detail: best.crowd });
@@ -160,19 +168,19 @@ function buildReasons(best, now, context) {
     reasons.push({ icon: 'sun', title: '해질 무렵과 겹침', detail: `일몰 ${timeLabel(context.sunset)}` });
   }
 
-  if ((best.rainChance ?? 0) <= 30) {
-    const laterRain = context.slots?.find((s) => new Date(s.time) > new Date(best.time) && (s.rainChance ?? 0) >= 60);
+  if (Number.isFinite(best.rainChance) && best.rainChance <= 30) {
+    const laterRain = context.slots?.find((s) => new Date(s.time) > new Date(best.time) && Number.isFinite(s.rainChance) && s.rainChance >= 60);
     reasons.push({
       icon: 'rain',
       title: laterRain ? '비 오기 전에 끝낼 수 있음' : '비 걱정이 적음',
-      detail: `강수확률 ${best.rainChance ?? 0}%`
+      detail: `강수확률 ${best.rainChance}%`
     });
   }
 
-  if (reasons.length < 3 && best.temp >= 20 && best.temp <= 27) {
+  if (reasons.length < 3 && Number.isFinite(best.temp) && best.temp >= 20 && best.temp <= 27) {
     reasons.push({ icon: 'temp', title: '걷기 좋은 온도', detail: `${best.temp}°` });
   }
-  if (reasons.length < 3 && best.pm25 <= 35) {
+  if (reasons.length < 3 && Number.isFinite(best.pm25) && best.pm25 <= 35) {
     reasons.push({ icon: 'air', title: '공기도 무난함', detail: `초미세먼지 ${best.pm25}` });
   }
   return reasons.slice(0, 3);
@@ -186,8 +194,8 @@ function describeAlternative(candidate, best) {
   const options = [
     { key:'crowd', gain:crowdGain, threshold:18, label:'한적함이 더 중요하면', reason:`${candidate.crowd} · ${timeLabel(candidate.time)}` },
     { key:'experience', gain:experienceGain, threshold:14, label:'분위기가 더 중요하면', reason:`${timeLabel(candidate.time)} · 일몰 쪽` },
-    { key:'weather', gain:weatherGain, threshold:12, label:'날씨 편안함이 더 중요하면', reason:`${candidate.temp}° · 비 ${candidate.rainChance ?? 0}%` }
-  ].filter((x) => x.gain >= x.threshold).sort((a,b) => b.gain - a.gain);
+    { key:'weather', gain:weatherGain, threshold:12, available:Number.isFinite(candidate.temp) && Number.isFinite(candidate.rainChance), label:'날씨 편안함이 더 중요하면', reason:`${candidate.temp}° · 비 ${candidate.rainChance}%` }
+  ].filter((x) => x.available !== false && x.gain >= x.threshold).sort((a,b) => b.gain - a.gain);
 
   if (!options.length) return null;
   const chosen = options[0];

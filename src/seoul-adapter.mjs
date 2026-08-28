@@ -1,6 +1,8 @@
-function parseNum(v, fallback = 0) {
+function parseNum(v, fallback = null) {
   if (v == null || v === '') return fallback;
-  const n = Number(String(v).replace(/[^0-9.+-]/g, ''));
+  const cleaned = String(v).replace(/[^0-9.+-]/g, '');
+  if (!cleaned) return fallback;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : fallback;
 }
 
@@ -27,11 +29,13 @@ function unwrap(section, key) {
 }
 
 export function normalizeCrowd(v) {
-  const s = String(v || '보통');
+  if (v == null || String(v).trim() === '') return null;
+  const s = String(v);
   if (s.includes('여유')) return '여유';
   if (s.includes('약간')) return '약간 붐빔';
   if (s.includes('붐')) return '붐빔';
-  return '보통';
+  if (s.includes('보통')) return '보통';
+  return null;
 }
 
 export function toIsoSeoul(value, referenceDate = new Date()) {
@@ -39,18 +43,24 @@ export function toIsoSeoul(value, referenceDate = new Date()) {
   const s = String(value).trim();
   if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
     const normalized = s.replace(' ', 'T');
-    return /[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized.length === 16 ? normalized + ':00' : normalized}+09:00`;
+    const candidate = /[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized.length === 16 ? normalized + ':00' : normalized}+09:00`;
+    return Number.isFinite(new Date(candidate).getTime()) ? candidate : null;
   }
-  if (/^\d{12}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T${s.slice(8,10)}:${s.slice(10,12)}:00+09:00`;
+  if (/^\d{12}$/.test(s)) {
+    const candidate = `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T${s.slice(8,10)}:${s.slice(10,12)}:00+09:00`;
+    return Number.isFinite(new Date(candidate).getTime()) ? candidate : null;
+  }
   if (/^\d{8}\s?\d{4}$/.test(s)) {
     const x = s.replace(/\s/g, '');
-    return `${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}T${x.slice(8,10)}:${x.slice(10,12)}:00+09:00`;
+    const candidate = `${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}T${x.slice(8,10)}:${x.slice(10,12)}:00+09:00`;
+    return Number.isFinite(new Date(candidate).getTime()) ? candidate : null;
   }
   // SUNSET/SUNRISE may be HH:MM only. Anchor it to the current Seoul date.
   if (/^\d{1,2}:\d{2}$/.test(s)) {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(referenceDate);
     const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
-    return `${m.year}-${m.month}-${m.day}T${s.padStart(5,'0')}:00+09:00`;
+    const candidate = `${m.year}-${m.month}-${m.day}T${s.padStart(5,'0')}:00+09:00`;
+    return Number.isFinite(new Date(candidate).getTime()) ? candidate : null;
   }
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
@@ -75,13 +85,13 @@ function findCityRow(payload) {
   return null;
 }
 
-function nearestPopulation(popForecast, weatherIso) {
+function nearestPopulation(popForecast, weatherIso, referenceDate) {
   if (!weatherIso || !popForecast.length) return null;
   const target = new Date(weatherIso).getTime();
   let best = null;
   let delta = Infinity;
   for (const item of popForecast) {
-    const iso = toIsoSeoul(item.FCST_TIME);
+    const iso = toIsoSeoul(item.FCST_TIME, referenceDate);
     if (!iso) continue;
     const d = Math.abs(new Date(iso).getTime() - target);
     if (d < delta) { delta = d; best = item; }
@@ -103,49 +113,57 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   const popForecast = asArray(popForecastRaw).filter(Boolean);
   const weatherForecast = asArray(weatherForecastRaw).filter(Boolean);
 
-  const slots = weatherForecast.slice(0, 24).map((f) => {
+  const slots = weatherForecast.map((f) => {
     const time = toIsoSeoul(f.FCST_DT || f.FCST_TIME, referenceDate);
-    const p = nearestPopulation(popForecast, time);
+    const p = nearestPopulation(popForecast, time, referenceDate);
+    const crowd = p ? normalizeCrowd(p.FCST_CONGEST_LVL) : null;
+    const pm25 = parseNum(weather.PM25);
+    const pm10 = parseNum(weather.PM10);
+    const uv = parseNum(weather.UV_INDEX);
     return {
       time,
-      temp: parseNum(f.TEMP, parseNum(weather.TEMP, 24)),
-      rainChance: parseNum(f.RAIN_CHANCE, 0),
-      precipitation: parseNum(f.PRECIPITATION, 0),
+      temp: parseNum(f.TEMP),
+      rainChance: parseNum(f.RAIN_CHANCE),
+      precipitation: parseNum(f.PRECIPITATION),
       // Seoul citydata provides hourly temperature/rain, but wind/air/UV are current observations.
       // Do not pretend the current wind is an hourly forecast. KMA can fill wind later.
       wind: null,
-      pm25: parseNum(weather.PM25, 20),
-      pm10: parseNum(weather.PM10, 35),
-      uv: parseNum(weather.UV_INDEX, 0),
-      crowd: p ? normalizeCrowd(p.FCST_CONGEST_LVL) : null,
+      pm25,
+      pm10,
+      uv,
+      crowd,
       eventImpact: 0,
       provenance: {
         weather: 'seoul_hourly_forecast',
         wind: 'missing_until_kma',
-        air: 'current_observation',
-        uv: 'current_observation',
-        crowd: p ? 'seoul_population_forecast' : 'unknown'
+        air: Number.isFinite(pm25) || Number.isFinite(pm10) ? 'current_observation' : 'missing',
+        uv: Number.isFinite(uv) ? 'current_observation' : 'missing',
+        crowd: crowd ? 'seoul_population_forecast' : 'unknown'
       }
     };
-  }).filter((x) => x.time);
+  }).filter((x) => x.time)
+    .sort((a, b) => new Date(a.time) - new Date(b.time))
+    .slice(0, 24);
 
   if (!slots.length) throw new Error('No 24h forecast slots in Seoul API response');
-  const currentTime = toIsoSeoul(weather.WEATHER_TIME || live.PPLTN_TIME, referenceDate) || new Date().toISOString();
+  const currentTime = toIsoSeoul(weather.WEATHER_TIME || live.PPLTN_TIME, referenceDate);
   const current = {
     time: currentTime,
-    temp: parseNum(weather.TEMP, slots[0]?.temp ?? 24),
-    rainChance: 0,
-    precipitation: parseNum(weather.PRECIPITATION, 0),
-    wind: parseNum(weather.WIND_SPD, 2),
-    pm25: parseNum(weather.PM25, 20),
-    pm10: parseNum(weather.PM10, 35),
-    uv: parseNum(weather.UV_INDEX, 0),
+    temp: parseNum(weather.TEMP),
+    rainChance: null,
+    precipitation: parseNum(weather.PRECIPITATION),
+    wind: parseNum(weather.WIND_SPD),
+    pm25: parseNum(weather.PM25),
+    pm10: parseNum(weather.PM10),
+    uv: parseNum(weather.UV_INDEX),
     crowd: normalizeCrowd(live.AREA_CONGEST_LVL),
     eventImpact: 0
   };
   return {
     updatedAt: currentTime,
-    nowTime: currentTime,
+    // Recommendation horizons must use decision time, not a possibly delayed
+    // observation timestamp from the upstream feed.
+    nowTime: referenceDate.toISOString(),
     current,
     sunset: toIsoSeoul(weather.SUNSET, referenceDate),
     slots

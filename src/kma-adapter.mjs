@@ -51,10 +51,19 @@ export function latestKmaBase(now = new Date()) {
   return { base_date: ymd(kstParts(baseDate)), base_time: `${String(hour).padStart(2,'0')}00` };
 }
 
+function parseNumber(v) {
+  if (v == null || String(v).trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parsePcp(v) {
-  if (v == null || v === '' || String(v).includes('강수없음')) return 0;
+  if (v == null || String(v).trim() === '') return null;
+  if (String(v).includes('강수없음')) return 0;
   const m = String(v).match(/[0-9.]+/);
-  return m ? Number(m[0]) : 0;
+  if (!m) return null;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function normalizeKmaForecast(payload) {
@@ -69,21 +78,26 @@ export function normalizeKmaForecast(payload) {
   }
   return [...byTime.values()].sort((a,b) => a.key.localeCompare(b.key)).map((r) => ({
     time: `${r.fcstDate.slice(0,4)}-${r.fcstDate.slice(4,6)}-${r.fcstDate.slice(6,8)}T${r.fcstTime.slice(0,2)}:${r.fcstTime.slice(2,4)}:00+09:00`,
-    temp: Number(r.TMP),
-    rainChance: Number(r.POP ?? 0),
+    temp: parseNumber(r.TMP),
+    rainChance: parseNumber(r.POP),
     precipitation: parsePcp(r.PCP),
-    wind: Number(r.WSD),
-    humidity: Number(r.REH),
-    precipType: Number(r.PTY ?? 0),
-    sky: Number(r.SKY ?? 0)
-  })).filter((r) => Number.isFinite(r.temp));
+    wind: parseNumber(r.WSD),
+    humidity: parseNumber(r.REH),
+    precipType: parseNumber(r.PTY),
+    sky: parseNumber(r.SKY)
+  })).filter((r) => [r.temp, r.rainChance, r.precipitation, r.wind].some(Number.isFinite));
 }
 
 export async function fetchKmaForecast({ serviceKey, lat, lon, now = new Date() }) {
   const { nx, ny } = latLonToKmaGrid(lat, lon);
   const { base_date, base_time } = latestKmaBase(now);
   const url = new URL('https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst');
-  url.searchParams.set('serviceKey', serviceKey);
+  // data.go.kr displays both encoded and decoded key forms. URLSearchParams
+  // performs encoding itself, so decode a displayed encoded key once to avoid
+  // silently sending `%252B`/`%253D` and losing KMA data.
+  let normalizedKey = serviceKey;
+  try { normalizedKey = decodeURIComponent(serviceKey); } catch {}
+  url.searchParams.set('serviceKey', normalizedKey);
   url.searchParams.set('pageNo', '1');
   url.searchParams.set('numOfRows', '1000');
   url.searchParams.set('dataType', 'JSON');
@@ -108,19 +122,30 @@ export function mergeKmaIntoSlots(slots, kma) {
       if (d < delta) { delta = d; best = k; }
     }
     if (!best || delta > 31 * 60 * 1000) return slot;
+    const hasTemp = Number.isFinite(best.temp);
+    const hasRainChance = Number.isFinite(best.rainChance);
+    const hasPrecipitation = Number.isFinite(best.precipitation);
     const hasWind = Number.isFinite(best.wind);
+    const weatherFields = [hasTemp, hasRainChance, hasPrecipitation];
+    const hasWeather = weatherFields.some(Boolean);
+    const hasCompleteWeather = weatherFields.every(Boolean);
     return {
       ...slot,
-      temp: best.temp,
-      rainChance: best.rainChance,
-      precipitation: best.precipitation,
+      temp: hasTemp ? best.temp : slot.temp,
+      rainChance: hasRainChance ? best.rainChance : slot.rainChance,
+      precipitation: hasPrecipitation ? best.precipitation : slot.precipitation,
       wind: hasWind ? best.wind : slot.wind,
       provenance: {
         ...(slot.provenance || {}),
-        weather: 'kma_hourly_forecast',
+        weather: hasCompleteWeather
+          ? 'kma_hourly_forecast'
+          : hasWeather ? 'mixed_hourly_forecast' : (slot.provenance?.weather || 'missing'),
+        temp: hasTemp ? 'kma_hourly_forecast' : (slot.provenance?.temp || slot.provenance?.weather || 'missing'),
+        rain: hasRainChance ? 'kma_hourly_forecast' : (slot.provenance?.rain || slot.provenance?.weather || 'missing'),
+        precipitation: hasPrecipitation ? 'kma_hourly_forecast' : (slot.provenance?.precipitation || slot.provenance?.weather || 'missing'),
         wind: hasWind ? 'kma_hourly_forecast' : (slot.provenance?.wind || 'missing')
       },
-      weatherSource: 'KMA'
+      weatherSource: hasWeather || hasWind ? 'KMA' : slot.weatherSource
     };
   });
 }

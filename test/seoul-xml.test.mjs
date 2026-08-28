@@ -37,3 +37,7 @@ test('surfaces Seoul XML RESULT errors as readable errors', () => {
   const xml = '<RESULT><CODE-?>ignored</CODE-?><RESULT.CODE>ERROR-301</RESULT.CODE><RESULT.MESSAGE>INVALID KEY</RESULT.MESSAGE></RESULT>';
   assert.throws(() => parseSeoulXml(xml), /ERROR-301.*INVALID KEY/);
 });
+
+test('rejects mismatched closing tags instead of silently reshaping data', () => {
+  assert.throws(() => parseSeoulXml('<SeoulRtd.citydata><CITYDATA></SeoulRtd.citydata></CITYDATA>'), /expected <\/CITYDATA>/);
+});

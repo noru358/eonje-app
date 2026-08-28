@@ -1,6 +1,6 @@
 # 언제(eonje-app) — Current Project Status
 
-Updated: 2026-08-29 KST
+Updated: 2026-08-29 KST (v0.6.2 review patch)
 
 ## Current branch
 
@@ -59,16 +59,28 @@ Around 03:30 KST on 2026-08-29:
 
 ## Current validation status
 
-GitHub Actions runs tests on macOS / Windows / Linux. The latest small confidence-sanitizer fix was pushed after a regression test correctly caught that missing wind could still retain `높음` confidence. Check the latest branch CI before merge.
+GitHub Actions runs tests on macOS / Windows / Linux. Upstream HEAD `d1f0a77` passed run #30 on all three operating systems.
+
+The v0.6.2 adversarial review patch now passes 41 local tests (up from 28) and syntax/diff checks. It fixes silent missing-data defaults, partial KMA merge corruption, stale LIVE labeling, decision-time drift, empty-horizon failures, unsupported alternative copy, invalid-place fallback, forecast ordering/time validation, snapshot-failure inconsistency, malformed XML acceptance, and misleading port-fallback logs.
+
+See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
+
+A six-park QC runner is available as `npm run qc:live`. Start the server with both keys first. If port fallback selects another port, set `EONJE_BASE_URL`, for example:
+
+```bash
+EONJE_BASE_URL=http://127.0.0.1:4174 npm run qc:live
+```
+
+The current review runtime did not contain either API key, so only the runner's six-park DEMO smoke path was executed. Real six-park QC remains mandatory before merge.
 
 ## Immediate next steps
 
-1. Pull latest `feat/live-data-v0.6` and run `npm test`.
-2. Confirm latest Yeouido verdict fields: `windowLabel`, `reasons`, `confidenceDetail`, `best.provenance`, and KST `end`.
-3. Run six-park live-data QC and compare payload completeness / forecast horizons.
-4. Perform external adversarial code review using `docs/CODE_REVIEW_BRIEF.md`.
-5. Fix P0/P1 findings.
-6. Build snapshot/replay calibration dataset and evaluate scoring weights / hard gates empirically.
+1. Push the v0.6.2 review patch and confirm macOS / Windows / Linux CI.
+2. With both API keys configured, run `npm start` and `npm run qc:live`.
+3. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
+4. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests.
+5. Add source-specific freshness/base metadata and one-release KMA retry.
+6. Build the calibration dataset and evaluate scoring weights / hard gates empirically.
 7. Only after that, polish UI / deployment / user testing and merge toward `main`.
 
 ## How to resume in a fresh ChatGPT session

@@ -26,3 +26,17 @@ test('unknown best crowd removes people claim and crowd alternative', () => {
   assert.equal(out.confidence, '보통');
   assert.match(out.confidenceDetail, /혼잡 예측 없음/);
 });
+
+test('unknown crowd removes crowd comparison from a non-crowd alternative tradeoff', () => {
+  const out = sanitizeVerdict({
+    status:'go', confidence:'보통',
+    best:{ time:'2026-08-29T20:00:00+09:00', crowd:null, wind:1, temp:24, rainChance:0, precipitation:0 },
+    scored:[
+      { time:'2026-08-29T20:00:00+09:00', crowd:null },
+      { time:'2026-08-29T22:00:00+09:00', crowd:'붐빔' }
+    ],
+    reasons:[],
+    alternative:{ type:'weather', time:'2026-08-29T22:00:00+09:00', tradeoff:'대신 사람은 기본 추천보다 많을 수 있다.' }
+  });
+  assert.equal(out.alternative.tradeoff, '전체 조건은 기본 추천이 조금 더 낫다.');
+});

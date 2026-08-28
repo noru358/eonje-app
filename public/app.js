@@ -74,7 +74,7 @@ function renderTimeline(scored = [], bestTime) {
       </div>
       ${s.gated
         ? `<div class="slot-gate">${s.gate || '추천 제외'}</div>`
-        : `<div class="slot-crowd">${s.crowd}</div><div class="slot-meta">${s.temp}° · 비 ${s.rainChance ?? 0}%<br>바람 ${s.wind ?? '—'}m/s</div>`}
+        : `<div class="slot-crowd">${s.crowd ?? '혼잡 예측 없음'}</div><div class="slot-meta">${s.temp ?? '—'}° · 비 ${s.rainChance ?? '—'}%<br>바람 ${s.wind ?? '—'}m/s</div>`}
     </div>`).join('');
 }
 
@@ -82,9 +82,9 @@ function renderSummary(verdict) {
   const best = verdict.best;
   if (!best) { $('detailSummary').innerHTML = ''; return; }
   $('detailSummary').innerHTML = `
-    <div class="metric"><span class="metric-label">혼잡</span><span class="metric-value">${best.crowd}</span></div>
-    <div class="metric"><span class="metric-label">체감 조건</span><span class="metric-value">${best.temp}° · 바람 ${best.wind ?? '—'}</span></div>
-    <div class="metric"><span class="metric-label">비</span><span class="metric-value">${best.rainChance ?? 0}%</span></div>`;
+    <div class="metric"><span class="metric-label">혼잡</span><span class="metric-value">${best.crowd ?? '예측 없음'}</span></div>
+    <div class="metric"><span class="metric-label">체감 조건</span><span class="metric-value">${best.temp ?? '—'}° · 바람 ${best.wind ?? '—'}</span></div>
+    <div class="metric"><span class="metric-label">비</span><span class="metric-value">${best.rainChance ?? '—'}%</span></div>`;
 }
 
 function confidenceLabel(value) {
@@ -94,6 +94,8 @@ function confidenceLabel(value) {
 }
 
 function sourceText(data) {
+  if (data.quality?.state === 'stale') return `데이터 출처: ${data.source || '서울특별시 실시간 도시데이터'} · ${data.quality.ageMinutes}분 지연`;
+  if (data.quality?.state === 'unknown' && data.mode === 'live') return `데이터 출처: ${data.source || '서울특별시 실시간 도시데이터'} · 갱신 시각 확인 불가`;
   if (data.mode === 'live') return `데이터 출처: ${data.source || '서울특별시 실시간 도시데이터'}`;
   return '현재 화면은 데모 데이터로 동작 중';
 }
@@ -104,13 +106,15 @@ function renderVerdict(place, data, verdict) {
   document.body.dataset.status = verdict.status;
   $('answer').setAttribute('aria-busy', 'false');
   $('placeName').textContent = place.name;
-  $('modeLabel').innerHTML = `<i></i><span>${data.mode === 'live' ? '실시간' : '데모'}</span>`;
+  const modeText = data.mode !== 'live' ? '데모' : data.quality?.state === 'fresh' ? '실시간' : data.quality?.state === 'stale' ? '지연' : '상태 확인 필요';
+  $('modeLabel').innerHTML = `<i></i><span>${modeText}</span>`;
   $('updatedLabel').textContent = data.updatedAt ? `${formatTime(data.updatedAt)} 업데이트` : '';
   $('headline').textContent = verdict.headline;
   $('windowLabel').textContent = verdict.windowLabel ?? (verdict.status === 'avoid' ? '오늘은 패스' : '내일 다시');
   $('subhead').textContent = verdict.subhead;
   renderReasons(verdict.reasons);
-  $('confidence').textContent = verdict.status === 'go' ? confidenceLabel(verdict.confidence) : verdict.status === 'avoid' ? '오늘 추천 제외' : '오늘 추천 종료';
+  const confidenceText = verdict.status === 'go' ? confidenceLabel(verdict.confidence) : verdict.status === 'avoid' ? '오늘 추천 제외' : '오늘 추천 종료';
+  $('confidence').textContent = verdict.confidenceDetail ? `${confidenceText} · ${verdict.confidenceDetail}` : confidenceText;
   renderTimeline(verdict.scored, verdict.best?.time);
   renderSummary(verdict);
   $('sourceLabel').textContent = sourceText(data);

@@ -24,6 +24,11 @@ test('client consumes the server verdict as the single decision source', () => {
 });
 
 test('demo mode is disclosed rather than presented as live data', () => {
-  assert.match(app, /data\.mode === 'live' \? '실시간' : '데모'/);
+  assert.match(app, /data\.mode !== 'live' \? '데모'/);
   assert.match(app, /현재 화면은 데모 데이터로 동작 중/);
+});
+
+test('stale live data is visibly distinguished from fresh live data', () => {
+  assert.match(app, /quality\?\.state === 'stale' \? '지연'/);
+  assert.match(app, /분 지연/);
 });

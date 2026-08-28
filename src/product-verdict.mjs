@@ -60,7 +60,7 @@ function chooseGo(a, b) {
   return a || b;
 }
 
-function compressPrimaryWindow(verdict) {
+function compressPrimaryWindow(verdict, nowIso) {
   if (verdict?.status !== 'go' || !Array.isArray(verdict.scored) || !verdict.best?.time) return verdict;
   const bestIndex = verdict.scored.findIndex((slot) => slot.time === verdict.best.time);
   if (bestIndex < 0) return verdict;
@@ -85,12 +85,14 @@ function compressPrimaryWindow(verdict) {
     }
   }
 
+  const startsNow = new Date(start).getTime() <= new Date(nowIso).getTime();
+  const crossesCalendarMidnight = dateKey(start) !== dateKey(nowIso);
   return {
     ...verdict,
     start,
     end,
-    windowLabel:`${timeLabel(start)}–${timeLabel(end)}`,
-    subhead:`${verdict.place?.shortName || ''}: ${timeLabel(start)}부터가 오늘의 답.`
+    windowLabel:`${startsNow ? '지금' : timeLabel(start)}–${timeLabel(end)}`,
+    subhead:`${verdict.place?.shortName || ''}: ${timeLabel(start)}부터가 ${crossesCalendarMidnight ? '오늘 밤의 답' : '오늘의 답'}.`
   };
 }
 
@@ -108,7 +110,7 @@ function explainWindow(verdict, sunset) {
   return { ...verdict, reasons:reasons.slice(0, 3) };
 }
 
-export function makeProductVerdict({ place, slots, sunset, nowTime, current = null, intent = 'general' }) {
+export function makeProductVerdict({ place, slots, sunset, nowTime, current = null, intent = 'general', quality = null }) {
   if (!slots?.length) throw new Error('slots are required');
   const nowIso = nowTime || current?.time || slots[0].time;
   const nowMs = new Date(nowIso).getTime();
@@ -131,10 +133,13 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
       if (d === today) return true;
       return nowHour >= 18 && d === tomorrow && hour(s.time) < 6;
     });
-    verdict = makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent });
+    verdict = horizon.length
+      ? makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent })
+      : { status:'done', headline:'오늘은 시간이 다 갔다.', subhead:'내일 다시 보는 게 낫다.', scored:[], reasons:[] };
   }
 
-  const compact = compressPrimaryWindow(verdict);
+  if (!verdict) verdict = { status:'done', headline:'오늘은 시간이 다 갔다.', subhead:'내일 다시 보는 게 낫다.', scored:[], reasons:[] };
+  const compact = compressPrimaryWindow(verdict, nowIso);
   const explained = explainWindow(headlineFromActualNow(compact, nowIso), sunset);
-  return sanitizeVerdict(explained, { current });
+  return sanitizeVerdict(explained, { current, quality });
 }

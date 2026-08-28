@@ -36,6 +36,11 @@ export function sanitizeVerdict(verdict, data = {}) {
     const candidate = verdict.scored?.find((slot) => slot.time === next.alternative.time);
     if (!hasKnownCrowd(best) || !hasKnownCrowd(candidate)) next.alternative = null;
   }
+  if (next.alternative && (!hasKnownCrowd(best) || !hasKnownCrowd(verdict.scored?.find((slot) => slot.time === next.alternative.time)))) {
+    if (/사람|붐/.test(next.alternative.tradeoff || '')) {
+      next.alternative.tradeoff = '전체 조건은 기본 추천이 조금 더 낫다.';
+    }
+  }
 
   // A current air-quality observation can still protect as a safety gate, but it
   // must not be phrased as a future-hour benefit when the recommended slot is far away.
@@ -46,11 +51,17 @@ export function sanitizeVerdict(verdict, data = {}) {
   const missing = [];
   if (!hasKnownCrowd(best)) missing.push('추천 시간 혼잡 예측 없음');
   if (!Number.isFinite(best?.wind)) missing.push('시간별 풍속 예보 없음');
+  if (!Number.isFinite(best?.temp)) missing.push('시간별 기온 예보 없음');
+  if (!Number.isFinite(best?.rainChance) || !Number.isFinite(best?.precipitation)) missing.push('시간별 강수 예보 불완전');
 
   // Crowd is 34% of utility, and weather includes wind. Missing either materially
   // weakens a "high confidence" claim even if the available components score well.
-  if ((!hasKnownCrowd(best) || !Number.isFinite(best?.wind)) && next.confidence === '높음') {
+  if (missing.length && next.confidence === '높음') {
     next.confidence = '보통';
+  }
+  if (data.quality?.state === 'stale') {
+    if (next.confidence === '높음') next.confidence = '보통';
+    next.confidenceDetail = appendDetail(next.confidenceDetail, `원천 데이터 ${data.quality.ageMinutes}분 지연`);
   }
   if (missing.length) next.confidenceDetail = appendDetail(next.confidenceDetail, missing.join(' · '));
 

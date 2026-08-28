@@ -5,7 +5,9 @@ export function assessDataQuality(data, { now = new Date(), staleAfterMinutes = 
 
   const updatedMs = data.updatedAt ? new Date(data.updatedAt).getTime() : NaN;
   if (!Number.isFinite(updatedMs)) return { state:'unknown', ageMinutes:null };
-  const ageMinutes = Math.max(0, Math.round((now.getTime() - updatedMs) / 60000));
+  const rawAgeMinutes = Math.round((now.getTime() - updatedMs) / 60000);
+  if (rawAgeMinutes < -5) return { state:'unknown', ageMinutes:rawAgeMinutes };
+  const ageMinutes = Math.max(0, rawAgeMinutes);
   return {
     state: ageMinutes > staleAfterMinutes ? 'stale' : 'fresh',
     ageMinutes

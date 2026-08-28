@@ -59,7 +59,7 @@ Around 03:30 KST on 2026-08-29:
 
 ## Current validation status
 
-GitHub Actions runs tests on macOS / Windows / Linux. Upstream HEAD `d1f0a77` passed run #30 on all three operating systems.
+GitHub Actions runs tests on macOS / Windows / Linux. v0.6.2 commit `e499ebc` passed run #31 on all three operating systems.
 
 The v0.6.2 adversarial review patch now passes 41 local tests (up from 28) and syntax/diff checks. It fixes silent missing-data defaults, partial KMA merge corruption, stale LIVE labeling, decision-time drift, empty-horizon failures, unsupported alternative copy, invalid-place fallback, forecast ordering/time validation, snapshot-failure inconsistency, malformed XML acceptance, and misleading port-fallback logs.
 
@@ -75,13 +75,12 @@ The current review runtime did not contain either API key, so only the runner's 
 
 ## Immediate next steps
 
-1. Push the v0.6.2 review patch and confirm macOS / Windows / Linux CI.
-2. With both API keys configured, run `npm start` and `npm run qc:live`.
-3. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
-4. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests.
-5. Add source-specific freshness/base metadata and one-release KMA retry.
-6. Build the calibration dataset and evaluate scoring weights / hard gates empirically.
-7. Only after that, polish UI / deployment / user testing and merge toward `main`.
+1. With both API keys configured, run `npm start` and `npm run qc:live`.
+2. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
+3. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests.
+4. Add source-specific freshness/base metadata and one-release KMA retry.
+5. Build the calibration dataset and evaluate scoring weights / hard gates empirically.
+6. Only after that, polish UI / deployment / user testing and merge toward `main`.
 
 ## How to resume in a fresh ChatGPT session
 

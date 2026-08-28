@@ -11,7 +11,18 @@ function asArray(v) {
 
 function unwrap(section, key) {
   if (section == null) return null;
-  if (section[key] != null) return section[key];
+  // Seoul JSON/XML conversions are inconsistent across serializers: a section
+  // may be an object, a one-item array, or repeat its own tag name one or
+  // more times (e.g. WEATHER_STTS.WEATHER_STTS). Peel those wrappers
+  // recursively so the rest of the adapter sees one stable object/list.
+  if (Array.isArray(section)) {
+    if (section.length === 0) return null;
+    if (section.length === 1) return unwrap(section[0], key);
+    return section.map((item) => unwrap(item, key)).flat().filter(Boolean);
+  }
+  if (typeof section === 'object' && section[key] != null) {
+    return unwrap(section[key], key);
+  }
   return section;
 }
 
@@ -35,7 +46,6 @@ export function toIsoSeoul(value, referenceDate = new Date()) {
     const x = s.replace(/\s/g, '');
     return `${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}T${x.slice(8,10)}:${x.slice(10,12)}:00+09:00`;
   }
-  // SUNSET/SUNRISE may be HH:MM only. Anchor it to the current Seoul date.
   if (/^\d{1,2}:\d{2}$/.test(s)) {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(referenceDate);
     const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
@@ -46,7 +56,6 @@ export function toIsoSeoul(value, referenceDate = new Date()) {
 }
 
 function findCityRow(payload) {
-  // Seoul XML converted to JSON commonly uses a literal dotted root key.
   const dotted = payload?.['SeoulRtd.citydata'];
   if (dotted?.CITYDATA) return Array.isArray(dotted.CITYDATA) ? dotted.CITYDATA[0] : dotted.CITYDATA;
   const candidates = [
@@ -75,7 +84,6 @@ function nearestPopulation(popForecast, weatherIso) {
     const d = Math.abs(new Date(iso).getTime() - target);
     if (d < delta) { delta = d; best = item; }
   }
-  // Do not marry unrelated forecast points.
   return delta <= 45 * 60 * 1000 ? best : null;
 }
 
@@ -83,10 +91,12 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   const row = findCityRow(payload);
   if (!row) throw new Error('Seoul API response shape not recognized');
 
-  const live = unwrap(row.LIVE_PPLTN_STTS, 'LIVE_PPLTN_STTS') || {};
-  const weather = unwrap(row.WEATHER_STTS, 'WEATHER_STTS') || {};
-  const popForecastRaw = unwrap(live.FCST_PPLTN, 'FCST_PPLTN') || live.FCST_PPLTN || [];
-  const weatherForecastRaw = unwrap(weather.FCST24HOURS, 'FCST24HOURS') || weather.FCST24HOURS || [];
+  const liveRaw = unwrap(row.LIVE_PPLTN_STTS, 'LIVE_PPLTN_STTS') || {};
+  const weatherRaw = unwrap(row.WEATHER_STTS, 'WEATHER_STTS') || {};
+  const live = Array.isArray(liveRaw) ? (liveRaw[0] || {}) : liveRaw;
+  const weather = Array.isArray(weatherRaw) ? (weatherRaw[0] || {}) : weatherRaw;
+  const popForecastRaw = unwrap(live.FCST_PPLTN, 'FCST_PPLTN') || [];
+  const weatherForecastRaw = unwrap(weather.FCST24HOURS, 'FCST24HOURS') || [];
   const popForecast = asArray(popForecastRaw).filter(Boolean);
   const weatherForecast = asArray(weatherForecastRaw).filter(Boolean);
 

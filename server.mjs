@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { PLACES } from './src/places.mjs';
 import { mockCityData } from './src/mock-data.mjs';
 import { normalizeSeoulCityData } from './src/seoul-adapter.mjs';
+import { parseSeoulXml } from './src/seoul-xml.mjs';
 import { fetchKmaForecast, mergeKmaIntoSlots } from './src/kma-adapter.mjs';
 import { makeVerdict } from './src/engine.mjs';
 
@@ -57,7 +58,6 @@ async function persistSnapshot(place, data) {
   await appendFile(file, `${JSON.stringify(record)}\n`, 'utf8');
   snapshotBuckets.add(dedupeKey);
 
-  // Keep the in-memory dedupe set bounded to roughly one day of 5-minute buckets.
   if (snapshotBuckets.size > 2000) snapshotBuckets.clear();
 }
 
@@ -65,13 +65,14 @@ async function fetchReal(place) {
   const cached = liveCache.get(place.id);
   if (cached && Date.now() - cached.at < 60_000) return cached.data;
 
-  // Official citydata documentation names XML; current Seoul Open API deployments are also used as JSON in the wild.
-  // Keep the key server-side and fail closed to demo until a real key is regression-tested.
+  // Korean citydata officially exposes XML. Request XML, parse it server-side,
+  // then pass the stable object shape to the existing normalizer.
   const area = encodeURIComponent(place.name);
-  const url = `http://openapi.seoul.go.kr:8088/${SEOUL_API_KEY}/json/citydata/1/5/${area}`;
+  const url = `http://openapi.seoul.go.kr:8088/${SEOUL_API_KEY}/xml/citydata/1/5/${area}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(7000) });
   if (!response.ok) throw new Error(`Seoul API HTTP ${response.status}`);
-  const payload = await response.json();
+  const xml = await response.text();
+  const payload = parseSeoulXml(xml);
   let normalized = normalizeSeoulCityData(payload);
   let weatherSource = '서울특별시 실시간 도시데이터';
   if (DATA_GO_KR_API_KEY) {
@@ -151,4 +152,4 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end('Not found');
 });
 
-server.listen(PORT, () => console.log(`언제 v0.3 → http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`언제 live-data v0.6 → http://localhost:${PORT}`));

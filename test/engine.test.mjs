@@ -35,7 +35,7 @@ test('current hour can produce an honest now verdict', () => {
   assert.match(verdict.windowLabel, /^지금–/);
 });
 
-test('today verdict never chooses after midnight', () => {
+test('late-evening verdict may cross midnight within the same outing day', () => {
   const slots = [
     { time:'2026-08-28T23:00:00+09:00', temp:28, rainChance:30, precipitation:0, wind:2, pm25:20, pm10:30, crowd:'약간 붐빔' },
     { time:'2026-08-29T00:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, pm25:10, pm10:20, crowd:'여유' }
@@ -44,9 +44,9 @@ test('today verdict never chooses after midnight', () => {
     place:{ id:'x', name:'X', shortName:'X' }, slots,
     sunset:'2026-08-28T19:07:00+09:00', nowTime:'2026-08-28T22:30:00+09:00'
   });
-  assert.equal(verdict.best.time, '2026-08-28T23:00:00+09:00');
+  assert.equal(verdict.best.time, '2026-08-29T00:00:00+09:00');
+  assert.match(verdict.subhead, /오늘 밤의 답/);
 });
-
 
 test('all gated slots produce an avoid verdict instead of a weak recommendation', () => {
   const slots = [

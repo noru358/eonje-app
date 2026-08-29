@@ -1,5 +1,8 @@
-const baseDate = '2026-08-28';
-const iso = (hm) => `${baseDate}T${hm}:00+09:00`;
+function seoulDate(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    year:'numeric', month:'2-digit', day:'2-digit', timeZone:'Asia/Seoul'
+  }).format(date);
+}
 
 const baseSlots = [
   ['18:00', 28, 20, 0, 3.4, 29, 48, 2, '약간 붐빔'],
@@ -25,8 +28,10 @@ function shiftCrowd(level, shift) {
   return crowdLevels[Math.max(0, Math.min(crowdLevels.length - 1, i + shift))];
 }
 
-export function mockCityData(placeId) {
+export function mockCityData(placeId, now = new Date()) {
   const v = variations[placeId] ?? variations.yeouido;
+  const baseDate = seoulDate(now);
+  const iso = (hm) => `${baseDate}T${hm}:00+09:00`;
   const slots = baseSlots.map(([time, temp, rainChance, precipitation, wind, pm25, pm10, uv, crowd], i) => ({
     time: iso(time),
     temp: temp + v.tempShift,
@@ -41,8 +46,8 @@ export function mockCityData(placeId) {
   }));
   return {
     mode: 'demo',
-    updatedAt: iso('18:00'),
-    nowTime: iso('18:00'),
+    updatedAt: now.toISOString(),
+    nowTime: now.toISOString(),
     sunset: iso('19:07'),
     slots
   };

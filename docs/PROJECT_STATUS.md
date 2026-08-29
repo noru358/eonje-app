@@ -1,6 +1,6 @@
 # 언제(eonje-app) — Current Project Status
 
-Updated: 2026-08-29 KST (v0.6.2 review patch)
+Updated: 2026-08-29 KST (v0.6.3 review follow-up)
 
 ## Current branch
 
@@ -56,12 +56,19 @@ Around 03:30 KST on 2026-08-29:
 - Public verdict end time is normalized to KST rather than mixing `Z` and `+09:00`.
 - Window-level reasons may include sunset when sunset lies inside the recommended window even if the single best slot is later.
 - Server auto-tries the next port when 4173 is occupied.
+- Missing forecast hours can no longer be presented as one continuous recommendation window.
+- Reasons and confidence are supported by the whole public window, not only the peak hour.
+- KMA is named as a source only when at least one field actually merges into a Seoul slot.
+- KMA base/grid/count/merge metadata is exposed and persisted; a late latest release retries exactly one prior base.
+- Bare Seoul sunset times are anchored to the source observation date for replay/midnight safety.
+- Demo dates follow the current Seoul date instead of a frozen 2026 fixture.
+- Non-finite optional score inputs cannot poison ranking, and all public verdict timestamps are KST-normalized.
 
 ## Current validation status
 
-GitHub Actions runs tests on macOS / Windows / Linux. v0.6.2 commit `e499ebc` passed run #31 on all three operating systems.
+GitHub Actions runs tests on macOS / Windows / Linux. Remote HEAD `ee26935` passed run #32 on all three operating systems.
 
-The v0.6.2 adversarial review patch now passes 41 local tests (up from 28) and syntax/diff checks. It fixes silent missing-data defaults, partial KMA merge corruption, stale LIVE labeling, decision-time drift, empty-horizon failures, unsupported alternative copy, invalid-place fallback, forecast ordering/time validation, snapshot-failure inconsistency, malformed XML acceptance, and misleading port-fallback logs.
+The v0.6.3 follow-up passes 51 local tests and syntax/demo-server smoke checks. In addition to the v0.6.2 uncertainty fixes, it closes the remaining policy-neutral review findings around time adjacency, window-level claims/confidence, actual KMA merge provenance, one-release KMA retry and metadata, source-date sunset anchoring, finite scoring, public KST timestamps, and dynamic demo dates. This follow-up still needs push and CI confirmation.
 
 See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
 
@@ -77,8 +84,8 @@ The current review runtime did not contain either API key, so only the runner's 
 
 1. With both API keys configured, run `npm start` and `npm run qc:live`.
 2. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
-3. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests.
-4. Add source-specific freshness/base metadata and one-release KMA retry.
+3. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests using the new source/base/merge metadata.
+4. Decide and document the validity horizon for current AQ and the uncertainty policy for missing crowd forecasts.
 5. Build the calibration dataset and evaluate scoring weights / hard gates empirically.
 6. Only after that, polish UI / deployment / user testing and merge toward `main`.
 

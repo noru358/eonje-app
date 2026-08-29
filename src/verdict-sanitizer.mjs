@@ -25,10 +25,19 @@ export function sanitizeVerdict(verdict, data = {}) {
 
   const best = verdict.best;
   const current = data.current;
+  const startMs = new Date(verdict.start).getTime();
+  const endMs = new Date(verdict.end).getTime();
+  const windowSlots = Array.isArray(verdict.scored) && Number.isFinite(startMs) && Number.isFinite(endMs)
+    ? verdict.scored.filter((slot) => {
+      const time = new Date(slot.time).getTime();
+      return Number.isFinite(time) && time >= startMs && time < endMs;
+    })
+    : [];
+  const supportSlots = windowSlots.length ? windowSlots : [best].filter(Boolean);
 
   // Never turn "unknown" crowd into a comparative claim. Unknown is not quieter,
   // busier, or equivalent to any observed/forecast congestion level.
-  if (!hasKnownCrowd(best)) {
+  if (supportSlots.some((slot) => !hasKnownCrowd(slot))) {
     next.reasons = next.reasons.filter((reason) => reason?.icon !== 'people');
   }
 
@@ -44,15 +53,15 @@ export function sanitizeVerdict(verdict, data = {}) {
 
   // A current air-quality observation can still protect as a safety gate, but it
   // must not be phrased as a future-hour benefit when the recommended slot is far away.
-  if (best?.provenance?.air === 'current_observation' && current?.time && best?.time && minutesBetween(best.time, current.time) > 90) {
+  if (supportSlots.some((slot) => slot?.provenance?.air === 'current_observation' && current?.time && slot?.time && minutesBetween(slot.time, current.time) > 90)) {
     next.reasons = next.reasons.filter((reason) => reason?.icon !== 'air');
   }
 
   const missing = [];
-  if (!hasKnownCrowd(best)) missing.push('추천 시간 혼잡 예측 없음');
-  if (!Number.isFinite(best?.wind)) missing.push('시간별 풍속 예보 없음');
-  if (!Number.isFinite(best?.temp)) missing.push('시간별 기온 예보 없음');
-  if (!Number.isFinite(best?.rainChance) || !Number.isFinite(best?.precipitation)) missing.push('시간별 강수 예보 불완전');
+  if (supportSlots.some((slot) => !hasKnownCrowd(slot))) missing.push('추천 구간 혼잡 예측 없음');
+  if (supportSlots.some((slot) => !Number.isFinite(slot?.wind))) missing.push('추천 구간 풍속 예보 없음');
+  if (supportSlots.some((slot) => !Number.isFinite(slot?.temp))) missing.push('추천 구간 기온 예보 없음');
+  if (supportSlots.some((slot) => !Number.isFinite(slot?.rainChance) || !Number.isFinite(slot?.precipitation))) missing.push('추천 구간 강수 예보 불완전');
 
   // Crowd is 34% of utility, and weather includes wind. Missing either materially
   // weakens a "high confidence" claim even if the available components score well.

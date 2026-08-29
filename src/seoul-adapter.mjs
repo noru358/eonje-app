@@ -112,6 +112,10 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   const weatherForecastRaw = unwrap(weather.FCST24HOURS, 'FCST24HOURS') || [];
   const popForecast = asArray(popForecastRaw).filter(Boolean);
   const weatherForecast = asArray(weatherForecastRaw).filter(Boolean);
+  const weatherObservedAt = toIsoSeoul(weather.WEATHER_TIME, referenceDate);
+  const populationObservedAt = toIsoSeoul(live.PPLTN_TIME, referenceDate);
+  const currentTime = weatherObservedAt || populationObservedAt;
+  const sourceDateReference = currentTime ? new Date(currentTime) : referenceDate;
 
   const slots = weatherForecast.map((f) => {
     const time = toIsoSeoul(f.FCST_DT || f.FCST_TIME, referenceDate);
@@ -146,7 +150,6 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
     .slice(0, 24);
 
   if (!slots.length) throw new Error('No 24h forecast slots in Seoul API response');
-  const currentTime = toIsoSeoul(weather.WEATHER_TIME || live.PPLTN_TIME, referenceDate);
   const current = {
     time: currentTime,
     temp: parseNum(weather.TEMP),
@@ -161,11 +164,16 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   };
   return {
     updatedAt: currentTime,
+    sourceMetadata:{
+      seoul:{ weatherObservedAt, populationObservedAt }
+    },
     // Recommendation horizons must use decision time, not a possibly delayed
     // observation timestamp from the upstream feed.
     nowTime: referenceDate.toISOString(),
     current,
-    sunset: toIsoSeoul(weather.SUNSET, referenceDate),
+    // A bare HH:MM belongs to the source observation's Seoul date, not the
+    // server clock's date (important for replay and midnight-delayed feeds).
+    sunset: toIsoSeoul(weather.SUNSET, sourceDateReference),
     slots
   };
 }

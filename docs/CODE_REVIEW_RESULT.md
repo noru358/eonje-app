@@ -57,3 +57,18 @@ The suite increased from 28 to 41 passing tests. Port fallback and invalid-place
 3. Add source-specific timestamps and KMA base metadata; retry one prior KMA release on delayed publication.
 4. Add in-flight request deduplication and snapshot-write failure injection.
 5. Build snapshot/replay evaluation and calibrate gates/weights before UI polish or merge to `main`.
+
+## v0.6.3 follow-up
+
+The next review pass closed additional policy-neutral findings raised against the pre-v0.6.2 code:
+
+- Recommendation windows and compression now require real one-hour timestamp adjacency.
+- Reasons and confidence are evaluated against the whole selected window.
+- Non-finite optional score inputs cannot poison ranking, and a missing current observation is not replaced by a future slot for “now” comparisons.
+- Public verdict times are normalized to `+09:00`.
+- KMA exposes requested/selected base, grid, response counts, retry state, and per-field merge counts; the source label changes only after a real merge.
+- A valid latest-release no-data response retries exactly one previous KMA release.
+- Bare sunset times use the Seoul source observation date, and demo data no longer uses a frozen calendar date.
+- Snapshot records now include source-specific Seoul/KMA metadata needed for replay and calibration.
+
+The remaining high-impact items require live fixtures or an explicit product policy: real six-park QC, current-AQ validity horizon, missing-crowd uncertainty treatment, and empirical gate/weight calibration.

@@ -116,7 +116,8 @@ export function scoreSlot(slot, context = {}) {
   );
   const crowd = CROWD_SCORE[slot.crowd] ?? 70;
   const experience = experienceScore(slot, context.sunset);
-  const eventAdjustment = slot.eventImpact ?? 0;
+  // Optional inputs must never poison the total with NaN/Infinity.
+  const eventAdjustment = Number.isFinite(slot.eventImpact) ? slot.eventImpact : 0;
   const timeAdjustment = timePreferenceAdjustment(slot, context.intent || 'general');
   const score = clamp(weather * 0.46 + crowd * 0.34 + experience * 0.20 + eventAdjustment + timeAdjustment);
   return {
@@ -153,14 +154,26 @@ function crowdRank(crowd) {
   return ['여유', '보통', '약간 붐빔', '붐빔'].indexOf(crowd);
 }
 
-function buildReasons(best, now, context) {
+function worstCrowd(slots) {
+  if (!slots.length || slots.some((slot) => crowdRank(slot.crowd) < 0)) return null;
+  return slots.reduce((worst, slot) => crowdRank(slot.crowd) > crowdRank(worst) ? slot.crowd : worst, slots[0].crowd);
+}
+
+function rangeDetail(values, suffix = '') {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return min === max ? `${min}${suffix}` : `${min}–${max}${suffix}`;
+}
+
+function buildReasons(windowSlots, best, now, context) {
   const reasons = [];
-  const bestCrowdRank = crowdRank(best.crowd);
+  const windowCrowd = worstCrowd(windowSlots);
+  const bestCrowdRank = crowdRank(windowCrowd);
   const nowCrowdRank = crowdRank(now?.crowd);
   if (bestCrowdRank >= 0 && nowCrowdRank >= 0 && bestCrowdRank + 1 <= nowCrowdRank) {
-    reasons.push({ icon: 'people', title: '지금보다 한산해짐', detail: `${now.crowd} → ${best.crowd}` });
-  } else if (best.crowd === '여유' || best.crowd === '보통') {
-    reasons.push({ icon: 'people', title: '사람이 덜 붐빔', detail: best.crowd });
+    reasons.push({ icon: 'people', title: '구간 내내 지금보다 한산함', detail: `${now.crowd} → 최대 ${windowCrowd}` });
+  } else if (windowCrowd === '여유' || windowCrowd === '보통') {
+    reasons.push({ icon: 'people', title: '구간 내내 크게 붐비지 않음', detail: `최대 ${windowCrowd}` });
   }
 
   const dSun = context.sunset ? minutesBetween(best.time, context.sunset) : null;
@@ -168,20 +181,24 @@ function buildReasons(best, now, context) {
     reasons.push({ icon: 'sun', title: '해질 무렵과 겹침', detail: `일몰 ${timeLabel(context.sunset)}` });
   }
 
-  if (Number.isFinite(best.rainChance) && best.rainChance <= 30) {
-    const laterRain = context.slots?.find((s) => new Date(s.time) > new Date(best.time) && Number.isFinite(s.rainChance) && s.rainChance >= 60);
+  const rainChances = windowSlots.map((slot) => slot.rainChance);
+  if (rainChances.length && rainChances.every(Number.isFinite) && Math.max(...rainChances) <= 30) {
+    const windowEndMs = Math.max(...windowSlots.map((slot) => new Date(slot.time).getTime())) + 60 * 60 * 1000;
+    const laterRain = context.slots?.find((s) => new Date(s.time).getTime() >= windowEndMs && Number.isFinite(s.rainChance) && s.rainChance >= 60);
     reasons.push({
       icon: 'rain',
       title: laterRain ? '비 오기 전에 끝낼 수 있음' : '비 걱정이 적음',
-      detail: `강수확률 ${best.rainChance}%`
+      detail: `구간 최대 강수확률 ${Math.max(...rainChances)}%`
     });
   }
 
-  if (reasons.length < 3 && Number.isFinite(best.temp) && best.temp >= 20 && best.temp <= 27) {
-    reasons.push({ icon: 'temp', title: '걷기 좋은 온도', detail: `${best.temp}°` });
+  const temperatures = windowSlots.map((slot) => slot.temp);
+  if (reasons.length < 3 && temperatures.length && temperatures.every(Number.isFinite) && Math.min(...temperatures) >= 20 && Math.max(...temperatures) <= 27) {
+    reasons.push({ icon: 'temp', title: '구간 내내 걷기 좋은 온도', detail: rangeDetail(temperatures, '°') });
   }
-  if (reasons.length < 3 && Number.isFinite(best.pm25) && best.pm25 <= 35) {
-    reasons.push({ icon: 'air', title: '공기도 무난함', detail: `초미세먼지 ${best.pm25}` });
+  const pm25Values = windowSlots.map((slot) => slot.pm25);
+  if (reasons.length < 3 && pm25Values.length && pm25Values.every(Number.isFinite) && Math.max(...pm25Values) <= 35) {
+    reasons.push({ icon: 'air', title: '공기도 무난함', detail: `구간 최대 초미세먼지 ${Math.max(...pm25Values)}` });
   }
   return reasons.slice(0, 3);
 }
@@ -252,8 +269,12 @@ function contiguousWindow(scored, bestIndex, tolerance = 5.5) {
   const best = scored[bestIndex];
   let left = bestIndex;
   let right = bestIndex;
-  while (left > 0 && !scored[left - 1].gated && best.score - scored[left - 1].score <= tolerance) left--;
-  while (right < scored.length - 1 && !scored[right + 1].gated && best.score - scored[right + 1].score <= tolerance) right++;
+  const adjacent = (earlier, later) => {
+    const delta = new Date(later.time).getTime() - new Date(earlier.time).getTime();
+    return Number.isFinite(delta) && delta > 0 && delta <= 61 * 60 * 1000;
+  };
+  while (left > 0 && adjacent(scored[left - 1], scored[left]) && !scored[left - 1].gated && best.score - scored[left - 1].score <= tolerance) left--;
+  while (right < scored.length - 1 && adjacent(scored[right], scored[right + 1]) && !scored[right + 1].gated && best.score - scored[right + 1].score <= tolerance) right++;
   return { left, right };
 }
 
@@ -283,23 +304,31 @@ export function makeVerdict({ place, slots, sunset, nowTime, current = null, int
     };
   }
 
-  let bestIndex = 0;
+  let bestIndex = scored.findIndex((slot) => !slot.gated && Number.isFinite(slot.score));
+  if (bestIndex < 0) {
+    return {
+      status: 'avoid', headline: '오늘은 추천을 계산하기 어렵다.',
+      subhead: '유효한 시간대별 데이터가 부족하다.', scored, reasons: []
+    };
+  }
   scored.forEach((s, i) => {
-    if (!s.gated && (scored[bestIndex].gated || s.score > scored[bestIndex].score)) bestIndex = i;
+    if (!s.gated && Number.isFinite(s.score) && s.score > scored[bestIndex].score) bestIndex = i;
   });
   const best = scored[bestIndex];
   const window = contiguousWindow(scored, bestIndex);
+  const windowSlots = scored.slice(window.left, window.right + 1);
   const alternative = findMeaningfulAlternative(scored, bestIndex, window);
   const start = scored[window.left].time;
-  const endCandidate = scored[Math.min(window.right + 1, scored.length - 1)].time;
-  const end = window.right === scored.length - 1
-    ? new Date(new Date(scored[window.right].time).getTime() + 60 * 60000).toISOString()
-    : endCandidate;
+  // A slot covers the following hour. Derive the end from the selected slot
+  // itself; the next array element may be hours away when upstream has gaps.
+  const end = new Date(new Date(scored[window.right].time).getTime() + 60 * 60000).toISOString();
   const currentHour = scored.find((s) => {
     const t = new Date(s.time).getTime();
     return t <= nowMs && nowMs < t + 60 * 60 * 1000;
   });
-  const now = current || currentHour || scored[0];
+  const currentMs = new Date(current?.time).getTime();
+  const usableCurrent = Number.isFinite(currentMs) && Math.abs(nowMs - currentMs) <= 90 * 60 * 1000 ? current : null;
+  const now = usableCurrent || currentHour || null;
   const waitMinutes = Math.max(0, Math.round((new Date(start).getTime() - nowMs) / 60000));
   const startsNow = new Date(start).getTime() <= nowMs;
 
@@ -321,8 +350,9 @@ export function makeVerdict({ place, slots, sunset, nowTime, current = null, int
     windowLabel: `${startsNow ? '지금' : timeLabel(start)}–${timeLabel(end)}`,
     headline,
     subhead: `${place.shortName}: ${timeLabel(start)}부터가 ${crossesCalendarMidnight ? '오늘 밤의 답' : '오늘의 답'}.`,
-    reasons: buildReasons(best, now, { sunset, slots }),
+    reasons: buildReasons(windowSlots, best, now, { sunset, slots }),
     alternative,
-    confidence: best.score >= 86 ? '높음' : best.score >= 74 ? '보통' : '낮음'
+    confidence: Math.min(...windowSlots.map((slot) => slot.score)) >= 86 ? '높음'
+      : Math.min(...windowSlots.map((slot) => slot.score)) >= 74 ? '보통' : '낮음'
   };
 }

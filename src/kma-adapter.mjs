@@ -51,6 +51,13 @@ export function latestKmaBase(now = new Date()) {
   return { base_date: ymd(kstParts(baseDate)), base_time: `${String(hour).padStart(2,'0')}00` };
 }
 
+export function previousKmaBase({ base_date, base_time }) {
+  const iso = `${base_date.slice(0,4)}-${base_date.slice(4,6)}-${base_date.slice(6,8)}T${base_time.slice(0,2)}:00:00+09:00`;
+  const previous = new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000);
+  const p = kstParts(previous);
+  return { base_date:ymd(p), base_time:`${String(p.hour).padStart(2,'0')}00` };
+}
+
 function parseNumber(v) {
   if (v == null || String(v).trim() === '') return null;
   const n = Number(v);
@@ -88,33 +95,69 @@ export function normalizeKmaForecast(payload) {
   })).filter((r) => [r.temp, r.rainChance, r.precipitation, r.wind].some(Number.isFinite));
 }
 
-export async function fetchKmaForecast({ serviceKey, lat, lon, now = new Date() }) {
+function isNoData(payload) {
+  const code = String(payload?.response?.header?.resultCode ?? '');
+  const message = String(payload?.response?.header?.resultMsg ?? '');
+  const items = payload?.response?.body?.items?.item;
+  return code === '03' || /NO_DATA/i.test(message) || (code === '00' && (!Array.isArray(items) || items.length === 0));
+}
+
+export async function fetchKmaForecast({ serviceKey, lat, lon, now = new Date(), fetchImpl = fetch }) {
   const { nx, ny } = latLonToKmaGrid(lat, lon);
-  const { base_date, base_time } = latestKmaBase(now);
-  const url = new URL('https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst');
+  const requestedBase = latestKmaBase(now);
   // data.go.kr displays both encoded and decoded key forms. URLSearchParams
   // performs encoding itself, so decode a displayed encoded key once to avoid
   // silently sending `%252B`/`%253D` and losing KMA data.
   let normalizedKey = serviceKey;
   try { normalizedKey = decodeURIComponent(serviceKey); } catch {}
-  url.searchParams.set('serviceKey', normalizedKey);
-  url.searchParams.set('pageNo', '1');
-  url.searchParams.set('numOfRows', '1000');
-  url.searchParams.set('dataType', 'JSON');
-  url.searchParams.set('base_date', base_date);
-  url.searchParams.set('base_time', base_time);
-  url.searchParams.set('nx', String(nx));
-  url.searchParams.set('ny', String(ny));
-  const response = await fetch(url, { signal: AbortSignal.timeout(7000) });
-  if (!response.ok) throw new Error(`KMA HTTP ${response.status}`);
-  const payload = await response.json();
-  const resultCode = payload?.response?.header?.resultCode;
+  const requestBase = async (base) => {
+    const url = new URL('https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst');
+    url.searchParams.set('serviceKey', normalizedKey);
+    url.searchParams.set('pageNo', '1');
+    url.searchParams.set('numOfRows', '1000');
+    url.searchParams.set('dataType', 'JSON');
+    url.searchParams.set('base_date', base.base_date);
+    url.searchParams.set('base_time', base.base_time);
+    url.searchParams.set('nx', String(nx));
+    url.searchParams.set('ny', String(ny));
+    const response = await fetchImpl(url, { signal:AbortSignal.timeout(7000) });
+    if (!response.ok) throw new Error(`KMA HTTP ${response.status}`);
+    return response.json();
+  };
+
+  let selectedBase = requestedBase;
+  let retriedPreviousBase = false;
+  let payload = await requestBase(selectedBase);
+  if (isNoData(payload)) {
+    selectedBase = previousKmaBase(requestedBase);
+    retriedPreviousBase = true;
+    payload = await requestBase(selectedBase);
+  }
+  const resultCode = String(payload?.response?.header?.resultCode ?? '');
+  if (isNoData(payload)) throw new Error(`KMA NO_DATA after retry (${selectedBase.base_date} ${selectedBase.base_time})`);
   if (resultCode && resultCode !== '00') throw new Error(`KMA ${resultCode}: ${payload?.response?.header?.resultMsg || 'error'}`);
-  return normalizeKmaForecast(payload);
+  const items = payload?.response?.body?.items?.item;
+  const rows = normalizeKmaForecast(payload);
+  const totalCount = Number(payload?.response?.body?.totalCount);
+  return {
+    rows,
+    metadata:{
+      requestedBase,
+      selectedBase,
+      retriedPreviousBase,
+      nx,
+      ny,
+      totalCount:Number.isFinite(totalCount) ? totalCount : null,
+      receivedItems:Array.isArray(items) ? items.length : 0,
+      truncated:Number.isFinite(totalCount) && Array.isArray(items) ? totalCount > items.length : null
+    }
+  };
 }
 
-export function mergeKmaIntoSlots(slots, kma) {
-  return slots.map((slot) => {
+export function mergeKmaIntoSlotsWithMeta(slots, kma) {
+  const mergedFields = { temp:0, rainChance:0, precipitation:0, wind:0 };
+  let mergedSlotCount = 0;
+  const mergedSlots = slots.map((slot) => {
     const target = new Date(slot.time).getTime();
     let best = null, delta = Infinity;
     for (const k of kma) {
@@ -129,6 +172,11 @@ export function mergeKmaIntoSlots(slots, kma) {
     const weatherFields = [hasTemp, hasRainChance, hasPrecipitation];
     const hasWeather = weatherFields.some(Boolean);
     const hasCompleteWeather = weatherFields.every(Boolean);
+    if (hasTemp) mergedFields.temp++;
+    if (hasRainChance) mergedFields.rainChance++;
+    if (hasPrecipitation) mergedFields.precipitation++;
+    if (hasWind) mergedFields.wind++;
+    if (hasWeather || hasWind) mergedSlotCount++;
     return {
       ...slot,
       temp: hasTemp ? best.temp : slot.temp,
@@ -148,4 +196,9 @@ export function mergeKmaIntoSlots(slots, kma) {
       weatherSource: hasWeather || hasWind ? 'KMA' : slot.weatherSource
     };
   });
+  return { slots:mergedSlots, mergedSlotCount, mergedFields };
+}
+
+export function mergeKmaIntoSlots(slots, kma) {
+  return mergeKmaIntoSlotsWithMeta(slots, kma).slots;
 }

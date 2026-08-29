@@ -18,3 +18,17 @@ test('primary window compresses broad good period around the peak', () => {
   assert.equal(verdict.windowLabel, '19:00–21:00');
   assert.equal(verdict.start, '2026-08-29T19:00:00+09:00');
 });
+
+test('compression never bridges a missing forecast hour', () => {
+  const verdict = makeProductVerdict({
+    place:{ id:'x', name:'X', shortName:'X' }, nowTime:'2026-08-29T18:00:00+09:00',
+    slots:[
+      { time:'2026-08-29T19:00:00Z', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' },
+      { time:'2026-08-29T21:00:00Z', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' }
+    ]
+  });
+  assert.equal(verdict.start, '2026-08-30T04:00:00+09:00');
+  assert.equal(verdict.end, '2026-08-30T05:00:00+09:00');
+  assert.match(verdict.best.time, /\+09:00$/);
+  assert.ok(verdict.scored.every((slot) => slot.time.endsWith('+09:00')));
+});

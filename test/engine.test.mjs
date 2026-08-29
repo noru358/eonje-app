@@ -14,11 +14,51 @@ test('comfortable, clear, uncrowded slot scores high', () => {
 });
 
 test('mock Yeouido verdict chooses evening window', () => {
-  const data = mockCityData('yeouido');
+  const data = mockCityData('yeouido', new Date('2026-08-28T09:00:00Z'));
   const v = makeVerdict({ place:getPlace('yeouido'), slots:data.slots, sunset:data.sunset, nowTime:data.nowTime });
   assert.equal(v.status, 'go');
   assert.ok(v.windowLabel.includes('19:'));
   assert.ok(v.reasons.length >= 2);
+});
+
+test('non-finite event impact cannot poison ranking', () => {
+  const result = scoreSlot({
+    time:'2026-08-29T19:00:00+09:00', temp:24, rainChance:0, precipitation:0,
+    wind:1, crowd:'보통', eventImpact:Number.NaN
+  });
+  assert.equal(Number.isFinite(result.score), true);
+});
+
+test('a missing hour breaks the primary window', () => {
+  const verdict = makeVerdict({
+    place:{ id:'x', name:'X', shortName:'X' }, nowTime:'2026-08-29T18:00:00+09:00',
+    slots:[
+      { time:'2026-08-29T19:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' },
+      { time:'2026-08-29T21:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' }
+    ]
+  });
+  assert.equal(verdict.start, '2026-08-29T19:00:00+09:00');
+  assert.equal(verdict.end, '2026-08-29T11:00:00.000Z');
+});
+
+test('reasons describe the whole selected window, not only its best hour', () => {
+  const rainVerdict = makeVerdict({
+    place:{ id:'x', name:'X', shortName:'X' }, nowTime:'2026-08-29T18:00:00+09:00',
+    slots:[
+      { time:'2026-08-29T19:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' },
+      { time:'2026-08-29T20:00:00+09:00', temp:24, rainChance:35, precipitation:0, wind:1, crowd:'보통' }
+    ]
+  });
+  assert.equal(rainVerdict.reasons.some((reason) => reason.icon === 'rain'), false);
+
+  const crowdVerdict = makeVerdict({
+    place:{ id:'x', name:'X', shortName:'X' }, nowTime:'2026-08-29T18:00:00+09:00',
+    slots:[
+      { time:'2026-08-29T19:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통' },
+      { time:'2026-08-29T20:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:null }
+    ]
+  });
+  assert.equal(crowdVerdict.reasons.some((reason) => reason.icon === 'people'), false);
 });
 
 test('current hour can produce an honest now verdict', () => {

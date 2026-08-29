@@ -52,6 +52,7 @@ const rows = await Promise.all(places.map(async (place) => {
       confidenceDetail:verdict.confidenceDetail || null,
       bestProvenance:verdict.best?.provenance || null
     },
+    sourceMetadata:city.sourceMetadata || null,
     issues
   };
 }));

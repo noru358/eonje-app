@@ -40,3 +40,19 @@ test('unknown crowd removes crowd comparison from a non-crowd alternative tradeo
   });
   assert.equal(out.alternative.tradeoff, '전체 조건은 기본 추천이 조금 더 낫다.');
 });
+
+test('missing data anywhere in the public window caps confidence', () => {
+  const out = sanitizeVerdict({
+    status:'go', confidence:'높음', start:'2026-08-29T19:00:00+09:00', end:'2026-08-29T21:00:00+09:00',
+    best:{ time:'2026-08-29T19:00:00+09:00', crowd:'여유', wind:1, temp:24, rainChance:0, precipitation:0 },
+    scored:[
+      { time:'2026-08-29T19:00:00+09:00', crowd:'여유', wind:1, temp:24, rainChance:0, precipitation:0 },
+      { time:'2026-08-29T20:00:00+09:00', crowd:null, wind:null, temp:24, rainChance:0, precipitation:0 }
+    ],
+    reasons:[{ icon:'people', title:'한산함' }]
+  });
+  assert.equal(out.confidence, '보통');
+  assert.equal(out.reasons.some((reason) => reason.icon === 'people'), false);
+  assert.match(out.confidenceDetail, /추천 구간 혼잡 예측 없음/);
+  assert.match(out.confidenceDetail, /추천 구간 풍속 예보 없음/);
+});

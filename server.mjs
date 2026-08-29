@@ -6,7 +6,7 @@ import { PLACES } from './src/places.mjs';
 import { mockCityData } from './src/mock-data.mjs';
 import { normalizeSeoulCityData } from './src/seoul-adapter.mjs';
 import { parseSeoulXml } from './src/seoul-xml.mjs';
-import { fetchKmaForecast, mergeKmaIntoSlots } from './src/kma-adapter.mjs';
+import { fetchKmaForecast, mergeKmaIntoSlotsWithMeta } from './src/kma-adapter.mjs';
 import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
@@ -59,6 +59,7 @@ async function persistSnapshot(place, data) {
     capturedAt: new Date().toISOString(),
     place: { id: place.id, name: place.name },
     source: data.source,
+    sourceMetadata: data.sourceMetadata || null,
     updatedAt: data.updatedAt,
     nowTime: data.nowTime,
     sunset: data.sunset,
@@ -85,8 +86,15 @@ async function fetchReal(place) {
   if (DATA_GO_KR_API_KEY) {
     try {
       const kma = await fetchKmaForecast({ serviceKey: DATA_GO_KR_API_KEY, lat: place.lat, lon: place.lon });
-      normalized = { ...normalized, slots: mergeKmaIntoSlots(normalized.slots, kma) };
-      weatherSource = '기상청 단기예보 + 서울특별시 실시간 도시데이터';
+      const merge = mergeKmaIntoSlotsWithMeta(normalized.slots, kma.rows);
+      const kmaMetadata = { ...kma.metadata, mergedSlotCount:merge.mergedSlotCount, mergedFields:merge.mergedFields };
+      normalized = {
+        ...normalized,
+        slots:merge.slots,
+        kma:kmaMetadata,
+        sourceMetadata:{ ...(normalized.sourceMetadata || {}), kma:kmaMetadata }
+      };
+      if (merge.mergedSlotCount > 0) weatherSource = '기상청 단기예보 + 서울특별시 실시간 도시데이터';
     } catch (error) {
       normalized = { ...normalized, kmaError: error.message };
     }
@@ -113,7 +121,7 @@ async function getCityData(place) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') return json(res, 200, {
-    ok:true, version:'0.6.2', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
+    ok:true, version:'0.6.3', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
   });
   if (url.pathname === '/api/places') return json(res, 200, PLACES);
   if (url.pathname === '/api/city' || url.pathname === '/api/verdict') {
@@ -133,6 +141,7 @@ async function handleApi(req, res, url) {
       data: {
         mode: data.mode, source: data.source, updatedAt: data.updatedAt, nowTime: data.nowTime,
         liveError: data.liveError || null, kmaError: data.kmaError || null,
+        sourceMetadata:data.sourceMetadata || null,
         quality
       },
       verdict
@@ -182,7 +191,7 @@ function listenWithFallback(port = PORT, attempt = 0) {
   const maxAttempts = 10;
   const onListening = () => {
     server.removeListener('error', onError);
-    console.log(`언제 v0.6.2 → http://localhost:${port}`);
+    console.log(`언제 v0.6.3 → http://localhost:${port}`);
   };
   const onError = (error) => {
     if (error?.code === 'EADDRINUSE' && attempt < maxAttempts) {

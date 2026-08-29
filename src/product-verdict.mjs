@@ -69,7 +69,10 @@ function compressPrimaryWindow(verdict, nowIso) {
   const neighbors = [bestIndex - 1, bestIndex + 1]
     .filter((i) => i >= 0 && i < verdict.scored.length)
     .map((i) => ({ index:i, slot:verdict.scored[i] }))
-    .filter(({ slot }) => !slot.gated && Number.isFinite(slot.score) && best.score - slot.score <= 4.0)
+    .filter(({ slot }) => {
+      const delta = Math.abs(new Date(slot.time).getTime() - new Date(best.time).getTime());
+      return delta > 0 && delta <= 61 * 60 * 1000 && !slot.gated && Number.isFinite(slot.score) && best.score - slot.score <= 4.0;
+    })
     .sort((a, b) => b.slot.score - a.slot.score);
 
   let start = best.time;
@@ -93,6 +96,19 @@ function compressPrimaryWindow(verdict, nowIso) {
     end,
     windowLabel:`${startsNow ? '지금' : timeLabel(start)}–${timeLabel(end)}`,
     subhead:`${verdict.place?.shortName || ''}: ${timeLabel(start)}부터가 ${crossesCalendarMidnight ? '오늘 밤의 답' : '오늘의 답'}.`
+  };
+}
+
+function normalizePublicTimes(verdict) {
+  if (!verdict) return verdict;
+  const normalize = (value) => value && Number.isFinite(new Date(value).getTime()) ? toSeoulIso(value) : value;
+  return {
+    ...verdict,
+    start:normalize(verdict.start),
+    end:normalize(verdict.end),
+    best:verdict.best ? { ...verdict.best, time:normalize(verdict.best.time) } : verdict.best,
+    scored:Array.isArray(verdict.scored) ? verdict.scored.map((slot) => ({ ...slot, time:normalize(slot.time) })) : verdict.scored,
+    alternative:verdict.alternative ? { ...verdict.alternative, time:normalize(verdict.alternative.time) } : verdict.alternative
   };
 }
 
@@ -141,5 +157,5 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
   if (!verdict) verdict = { status:'done', headline:'오늘은 시간이 다 갔다.', subhead:'내일 다시 보는 게 낫다.', scored:[], reasons:[] };
   const compact = compressPrimaryWindow(verdict, nowIso);
   const explained = explainWindow(headlineFromActualNow(compact, nowIso), sunset);
-  return sanitizeVerdict(explained, { current, quality });
+  return sanitizeVerdict(normalizePublicTimes(explained), { current, quality });
 }

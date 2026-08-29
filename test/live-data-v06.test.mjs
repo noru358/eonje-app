@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeSeoulCityData } from '../src/seoul-adapter.mjs';
 import { scoreSlot } from '../src/engine.mjs';
+import { mockCityData } from '../src/mock-data.mjs';
 
 test('Seoul live adapter keeps the full 24h horizon and does not fake future wind/crowd', () => {
   const hours = Array.from({ length: 24 }, (_, i) => ({
@@ -33,4 +34,10 @@ test('missing future wind is neutral, not silently treated as ideal calm wind', 
   const calm = scoreSlot({ ...base, wind:1 });
   assert.ok(unknown.score < calm.score);
   assert.equal(unknown.gated, false);
+});
+
+test('demo timestamps follow the current Seoul date instead of a frozen fixture date', () => {
+  const data = mockCityData('yeouido', new Date('2030-01-02T01:00:00Z'));
+  assert.equal(data.slots[0].time, '2030-01-02T18:00:00+09:00');
+  assert.equal(data.nowTime, '2030-01-02T01:00:00.000Z');
 });

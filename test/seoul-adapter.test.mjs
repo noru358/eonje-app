@@ -40,6 +40,8 @@ test('normalizes dotted Seoul root and nested repeated tags', () => {
   assert.equal(r.slots[1].crowd, '여유');
   assert.equal(r.slots[0].rainChance, 20);
   assert.match(r.sunset, /19:07/);
+  assert.equal(r.sourceMetadata.seoul.weatherObservedAt, '2026-08-28T18:00:00+09:00');
+  assert.equal(r.sourceMetadata.seoul.populationObservedAt, '2026-08-28T18:00:00+09:00');
 });
 
 test('normalizes Seoul JSON arrays around city/weather/population sections', () => {
@@ -94,4 +96,13 @@ test('rejects impossible source timestamps', () => {
   assert.equal(toIsoSeoul('2026-99-99 25:61'), null);
   assert.equal(toIsoSeoul('202699992561'), null);
   assert.equal(toIsoSeoul('99:99', new Date('2026-08-28T09:00:00Z')), null);
+});
+
+test('anchors a bare sunset time to the source observation date', () => {
+  const replay = structuredClone(fixture);
+  const weather = replay['SeoulRtd.citydata'].CITYDATA.WEATHER_STTS.WEATHER_STTS;
+  weather.WEATHER_TIME = '2026-08-28 23:55';
+  weather.SUNSET = '19:07';
+  const result = normalizeSeoulCityData(replay, { referenceDate:new Date('2026-08-29T15:10:00Z') });
+  assert.equal(result.sunset, '2026-08-28T19:07:00+09:00');
 });

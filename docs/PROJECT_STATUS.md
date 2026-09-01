@@ -74,7 +74,7 @@ GitHub Actions runs tests on macOS / Windows / Linux. Remote HEAD `ee26935` pass
 
 The v0.6.3 follow-up commit `291c33d` passes 51 local tests, syntax/demo-server smoke checks, and GitHub Actions run #33 on Ubuntu, macOS, and Windows. In addition to the v0.6.2 uncertainty fixes, it closes the remaining policy-neutral review findings around time adjacency, window-level claims/confidence, actual KMA merge provenance, one-release KMA retry and metadata, source-date sunset anchoring, finite scoring, public KST timestamps, and dynamic demo dates.
 
-The AQ/crowd policy patch passes 55 local tests. A live six-park run was attempted with both user-provided public-data keys, but the hosted execution environment blocked the outbound API call before it reached Seoul/KMA. No key was written to the repository. Real Windows-side QC therefore remains the next external validation gate.
+The AQ/crowd policy commit `6eb76d6` passes 55 local tests and GitHub Actions run #35 on Ubuntu, macOS, and Windows. A live six-park run was attempted with both user-provided public-data keys, but the hosted execution environment blocked the outbound API call before it reached Seoul/KMA. No key was written to the repository. Real Windows-side QC therefore remains the next external validation gate.
 
 See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
 

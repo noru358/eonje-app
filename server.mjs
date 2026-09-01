@@ -45,7 +45,11 @@ function json(res, status, body) {
 const liveCache = new Map();
 const snapshotBuckets = new Set();
 const runInflight = createInflightDeduper();
-const fetchKmaWithRetry = createTransientFetch(fetch, { retries:1, delayMs:250 });
+const fetchKmaWithRetry = createTransientFetch(fetch, {
+  retries:1,
+  delayMs:250,
+  signalFactory:() => AbortSignal.timeout(7000)
+});
 
 function seoulDate(iso = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

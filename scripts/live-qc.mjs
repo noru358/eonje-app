@@ -8,7 +8,10 @@ const OUTPUT_PATH = outputArgIndex >= 0 ? process.argv[outputArgIndex + 1] : nul
 if (outputArgIndex >= 0 && !OUTPUT_PATH) throw new Error('--output requires a file path');
 
 async function getJson(path) {
-  const response = await fetch(`${BASE_URL}${path}`, { signal:AbortSignal.timeout(20_000) });
+  // Six-park QC intentionally bounds KMA upstream concurrency. Later requests
+  // may spend time queued before their own bounded retry window begins, so the
+  // client timeout must cover queue time as well as network time.
+  const response = await fetch(`${BASE_URL}${path}`, { signal:AbortSignal.timeout(60_000) });
   if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
   return response.json();
 }
@@ -85,6 +88,7 @@ const rows = await Promise.all(places.map(async (place) => {
     mode:city.mode,
     quality:city.quality?.state,
     ageMinutes:city.quality?.ageMinutes,
+    sourceTiming:city.quality?.sourceTiming || null,
     slots:slots.length,
     horizonHours:horizonHours(slots),
     known:{

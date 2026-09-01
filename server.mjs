@@ -10,6 +10,7 @@ import { fetchKmaForecast, mergeKmaIntoSlotsWithMeta } from './src/kma-adapter.m
 import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
+import { createInflightDeduper } from './src/inflight-dedupe.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -40,6 +41,7 @@ function json(res, status, body) {
 
 const liveCache = new Map();
 const snapshotBuckets = new Set();
+const runInflight = createInflightDeduper();
 
 function seoulDate(iso = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -71,10 +73,7 @@ async function persistSnapshot(place, data) {
   if (snapshotBuckets.size > 2000) snapshotBuckets.clear();
 }
 
-async function fetchReal(place) {
-  const cached = liveCache.get(place.id);
-  if (cached && Date.now() - cached.at < 60_000) return cached.data;
-
+async function fetchRealUncached(place) {
   const area = encodeURIComponent(place.name);
   const url = `http://openapi.seoul.go.kr:8088/${SEOUL_API_KEY}/xml/citydata/1/5/${area}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(7000) });
@@ -108,6 +107,12 @@ async function fetchReal(place) {
   }
   liveCache.set(place.id, { at: Date.now(), data });
   return data;
+}
+
+async function fetchReal(place) {
+  const cached = liveCache.get(place.id);
+  if (cached && Date.now() - cached.at < 60_000) return cached.data;
+  return runInflight(place.id, () => fetchRealUncached(place));
 }
 
 async function getCityData(place) {

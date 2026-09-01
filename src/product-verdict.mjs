@@ -1,5 +1,6 @@
 import { makeVerdict } from './engine.mjs';
 import { sanitizeVerdict } from './verdict-sanitizer.mjs';
+import { applyIntentToSlots, decorateIntentVerdict, normalizeIntent } from './intent-policy.mjs';
 
 function seoulParts(iso) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -131,20 +132,22 @@ function explainWindow(verdict, sunset) {
 
 export function makeProductVerdict({ place, slots, sunset, nowTime, current = null, intent = 'general', quality = null }) {
   if (!slots?.length) throw new Error('slots are required');
-  const nowIso = nowTime || current?.time || slots[0].time;
+  const normalizedIntent = normalizeIntent(intent);
+  const preferenceSlots = applyIntentToSlots(slots, normalizedIntent, sunset);
+  const nowIso = nowTime || current?.time || preferenceSlots[0].time;
   const nowMs = new Date(nowIso).getTime();
   const today = dateKey(nowIso);
   const nowHour = hour(nowIso);
   const tomorrow = nextDateKey(nowIso);
-  const future = slots.filter((s) => futureSlot(s, nowMs));
+  const future = preferenceSlots.filter((s) => futureSlot(s, nowMs));
 
   let verdict;
   if (nowHour < 6) {
     const dawn = future.filter((s) => dateKey(s.time) === today && hour(s.time) < 6);
     const daytime = future.filter((s) => dateKey(s.time) === today && hour(s.time) >= 6);
-    const dawnVerdict = dawn.length ? makeVerdict({ place, slots:dawn, sunset, nowTime:nowIso, current, intent }) : null;
+    const dawnVerdict = dawn.length ? makeVerdict({ place, slots:dawn, sunset, nowTime:nowIso, current, intent:normalizedIntent }) : null;
     const dayAnchor = `${today}T06:00:00+09:00`;
-    const daytimeVerdict = daytime.length ? makeVerdict({ place, slots:daytime, sunset, nowTime:dayAnchor, current, intent }) : null;
+    const daytimeVerdict = daytime.length ? makeVerdict({ place, slots:daytime, sunset, nowTime:dayAnchor, current, intent:normalizedIntent }) : null;
     verdict = chooseGo(dawnVerdict, daytimeVerdict);
   } else {
     const horizon = future.filter((s) => {
@@ -153,12 +156,13 @@ export function makeProductVerdict({ place, slots, sunset, nowTime, current = nu
       return nowHour >= 18 && d === tomorrow && hour(s.time) < 6;
     });
     verdict = horizon.length
-      ? makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent })
+      ? makeVerdict({ place, slots:horizon, sunset, nowTime:nowIso, current, intent:normalizedIntent })
       : { status:'done', headline:'오늘은 시간이 다 갔다.', subhead:'내일 다시 보는 게 낫다.', scored:[], reasons:[] };
   }
 
   if (!verdict) verdict = { status:'done', headline:'오늘은 시간이 다 갔다.', subhead:'내일 다시 보는 게 낫다.', scored:[], reasons:[] };
   const compact = compressPrimaryWindow(verdict, nowIso);
   const explained = explainWindow(headlineFromActualNow(compact, nowIso), sunset);
-  return sanitizeVerdict(normalizePublicTimes(explained), { current, quality });
+  const decorated = decorateIntentVerdict(explained, normalizedIntent, sunset);
+  return sanitizeVerdict(normalizePublicTimes(decorated), { current, quality });
 }

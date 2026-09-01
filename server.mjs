@@ -13,6 +13,7 @@ import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
 import { createInflightDeduper } from './src/inflight-dedupe.mjs';
 import { createTransientFetch } from './src/transient-fetch.mjs';
+import { createConcurrencyLimiter } from './src/concurrency-limit.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -45,11 +46,15 @@ function json(res, status, body) {
 const liveCache = new Map();
 const snapshotBuckets = new Set();
 const runInflight = createInflightDeduper();
-const fetchKmaWithRetry = createTransientFetch(fetch, {
-  retries:1,
-  delayMs:250,
-  signalFactory:() => AbortSignal.timeout(7000)
-});
+const limitKmaFetch = createConcurrencyLimiter(2);
+const fetchKmaWithRetry = createTransientFetch(
+  (input, init) => limitKmaFetch(() => fetch(input, init)),
+  {
+    retries:1,
+    delayMs:250,
+    signalFactory:() => AbortSignal.timeout(7000)
+  }
+);
 
 function seoulDate(iso = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

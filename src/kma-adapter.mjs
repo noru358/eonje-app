@@ -114,7 +114,11 @@ export async function fetchKmaForecast({ serviceKey, lat, lon, now = new Date(),
     const url = new URL('https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst');
     url.searchParams.set('serviceKey', normalizedKey);
     url.searchParams.set('pageNo', '1');
-    url.searchParams.set('numOfRows', '1000');
+    // A normal village-forecast response currently exceeds 1,000 category
+    // items. Request the complete payload so category ordering cannot make a
+    // later required field disappear even when today's first 24 slots happen
+    // to merge successfully.
+    url.searchParams.set('numOfRows', '2000');
     url.searchParams.set('dataType', 'JSON');
     url.searchParams.set('base_date', base.base_date);
     url.searchParams.set('base_time', base.base_time);

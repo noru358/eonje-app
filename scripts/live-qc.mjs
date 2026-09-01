@@ -1,5 +1,11 @@
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
 const BASE_URL = (process.env.EONJE_BASE_URL || 'http://127.0.0.1:4173').replace(/\/$/, '');
 const ALLOW_DEMO = process.argv.includes('--allow-demo');
+const outputArgIndex = process.argv.indexOf('--output');
+const OUTPUT_PATH = outputArgIndex >= 0 ? process.argv[outputArgIndex + 1] : null;
+if (outputArgIndex >= 0 && !OUTPUT_PATH) throw new Error('--output requires a file path');
 
 async function getJson(path) {
   const response = await fetch(`${BASE_URL}${path}`, { signal:AbortSignal.timeout(20_000) });
@@ -29,6 +35,9 @@ const rows = await Promise.all(places.map(async (place) => {
   if (slots.length < 12) issues.push(`short_horizon=${slots.length}`);
   if (!verdict.best && verdict.status === 'go') issues.push('go_without_best');
   if (verdict.end && !String(verdict.end).endsWith('+09:00')) issues.push('end_not_kst');
+  if (city.sourceMetadata?.kma?.truncated) {
+    issues.push(`kma_truncated=${city.sourceMetadata.kma.receivedItems}/${city.sourceMetadata.kma.totalCount}`);
+  }
   return {
     place:place.id,
     mode:city.mode,
@@ -57,7 +66,12 @@ const rows = await Promise.all(places.map(async (place) => {
   };
 }));
 
-console.log(JSON.stringify({ checkedAt:new Date().toISOString(), baseUrl:BASE_URL, health, parks:rows }, null, 2));
+const report = { checkedAt:new Date().toISOString(), baseUrl:BASE_URL, health, parks:rows };
+const reportJson = `${JSON.stringify(report, null, 2)}\n`;
+// Let Node write UTF-8 directly. Windows PowerShell 5's Tee-Object converts
+// piped UTF-8 output through its legacy console encoding and corrupts Korean.
+if (OUTPUT_PATH) await writeFile(resolve(OUTPUT_PATH), reportJson, 'utf8');
+console.log(reportJson.trimEnd());
 
 const integrationMissing = !health.integrations?.seoul || !health.integrations?.kma;
 const rowIssues = rows.flatMap((row) => row.issues.map((issue) => `${row.place}:${issue}`));

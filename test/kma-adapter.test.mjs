@@ -59,6 +59,7 @@ test('late latest release retries exactly one previous KMA base and exposes meta
     }
   });
   assert.equal(urls.length, 2);
+  assert.match(urls[0], /numOfRows=2000/);
   assert.match(urls[0], /base_time=1700/);
   assert.match(urls[1], /base_time=1400/);
   assert.equal(result.metadata.retriedPreviousBase, true);

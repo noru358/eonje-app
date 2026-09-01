@@ -74,7 +74,7 @@ GitHub Actions runs tests on macOS / Windows / Linux. Remote HEAD `ee26935` pass
 
 The v0.6.3 follow-up commit `291c33d` passes 51 local tests, syntax/demo-server smoke checks, and GitHub Actions run #33 on Ubuntu, macOS, and Windows. In addition to the v0.6.2 uncertainty fixes, it closes the remaining policy-neutral review findings around time adjacency, window-level claims/confidence, actual KMA merge provenance, one-release KMA retry and metadata, source-date sunset anchoring, finite scoring, public KST timestamps, and dynamic demo dates.
 
-The AQ/crowd policy commit `6eb76d6` passes 55 local tests and GitHub Actions run #35 on Ubuntu, macOS, and Windows. A live six-park run was attempted with both user-provided public-data keys, but the hosted execution environment blocked the outbound API call before it reached Seoul/KMA. No key was written to the repository. Real Windows-side QC therefore remains the next external validation gate.
+The AQ/crowd policy commit `6eb76d6` passes 55 local tests and GitHub Actions run #35 on Ubuntu, macOS, and Windows. A Windows-side six-park run then confirmed all parks as LIVE/fresh with 24 hourly weather slots, 12 crowd-forecast slots, complete KMA merges for temperature/rain/precipitation/wind, KST ends, and no recommendation contract issues. It also exposed two QC-path defects: KMA returned 1,052 items while the request capped results at 1,000, and Windows PowerShell `Tee-Object` corrupted Korean output. The follow-up requests 2,000 KMA rows, fails QC on truncation, and adds direct UTF-8 file output via `npm run qc:live:file`. No key is stored in the repository.
 
 See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
 
@@ -88,13 +88,12 @@ The current review runtime did not contain either API key, so only the runner's 
 
 ## Immediate next steps
 
-1. With both API keys configured, run `npm start` and `npm run qc:live`.
-2. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
-3. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests using the new source/base/merge metadata.
-4. Add an hourly AQ provider abstraction and shadow-log candidate forecasts; compare Google Air Quality and Open-Meteo/CAMS against later Seoul observations by lead time.
-5. Build the calibration dataset and replace the bootstrap 6-point crowd penalty with source/horizon-specific empirical uncertainty; evaluate scoring weights / hard gates at the same time.
-6. Before substantial new product work, run a market/open-source Gate 0: comparable products, reusable implementations, differentiation, and build-vs-adapt decision.
-7. Only after that, polish UI / deployment / user testing and merge toward `main`.
+1. Re-run `npm run qc:live:file` on Windows after pulling the KMA/output fix; confirm no `kma_truncated` issue and attach the UTF-8 `live-qc.json`.
+2. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests using the new source/base/merge metadata.
+3. Add an hourly AQ provider abstraction and shadow-log candidate forecasts; compare Google Air Quality and Open-Meteo/CAMS against later Seoul observations by lead time.
+4. Build the calibration dataset and replace the bootstrap 6-point crowd penalty with source/horizon-specific empirical uncertainty; evaluate scoring weights / hard gates at the same time.
+5. Before substantial new product work, run a market/open-source Gate 0: comparable products, reusable implementations, differentiation, and build-vs-adapt decision.
+6. Only after that, polish UI / deployment / user testing and merge toward `main`.
 
 ## How to resume in a fresh ChatGPT session
 

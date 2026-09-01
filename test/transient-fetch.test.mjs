@@ -49,3 +49,32 @@ test('does not hide a repeated timeout', async () => {
   await assert.rejects(wrapped('https://example.test'), /timeout/);
   assert.equal(calls, 2);
 });
+
+test('signalFactory gives every retry a fresh non-aborted signal', async () => {
+  const seen = [];
+  let calls = 0;
+  const wrapped = createTransientFetch(async (_url, init) => {
+    seen.push(init.signal);
+    calls += 1;
+    assert.equal(init.signal.aborted, false);
+    if (calls === 1) {
+      const error = new Error('timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    }
+    return { ok:true, status:200 };
+  }, {
+    retries:1,
+    delayMs:0,
+    sleep:async () => {},
+    signalFactory:() => new AbortController().signal
+  });
+
+  const stale = AbortSignal.abort();
+  const response = await wrapped('https://example.test', { signal:stale });
+  assert.equal(response.status, 200);
+  assert.equal(seen.length, 2);
+  assert.notStrictEqual(seen[0], seen[1]);
+  assert.notStrictEqual(seen[0], stale);
+  assert.notStrictEqual(seen[1], stale);
+});

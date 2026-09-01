@@ -1,12 +1,12 @@
 # 언제(eonje-app) — Current Project Status
 
-Updated: 2026-09-02 KST (AQ/crowd uncertainty policy)
+Updated: 2026-09-01 KST (Gate 0 + strict live QC + AQ shadow/calibration)
 
 ## Current branch
 
 `feat/live-data-v0.6`
 
-This branch, not `main`, is the current development source of truth until live-data validation and review are complete.
+This branch, not `main`, is the current development source of truth until live-data validation, calibration, and release review are complete.
 
 ## Product job
 
@@ -16,22 +16,26 @@ Current parks: Yeouido, Banpo, Ttukseom, Mangwon, Jamsil, Ichon.
 
 First-screen goal: one decisive recommendation window, up to 3 supported reasons, optional meaningful alternative, progressive disclosure for evidence. No fake precision and no unsupported claims.
 
+## Gate 0 product decision
+
+Market/open-source Gate 0 is complete. See `docs/GATE0_MARKET_REUSE_20260901.md`.
+
+Direct Hangang products already provide combinations of live crowd, parking, weather, events, and short-horizon predictions. Therefore `언제` must not drift into a generic Hangang dashboard. Its differentiated job remains the decision layer:
+
+> **When should I go, why that time, how sure are you, and what is the meaningful fallback?**
+
+Generic raw-data cards, maps, parking, events, and guide content are supporting/commodity features unless they materially improve that decision.
+
+The current Seoul/KMA adapters, provenance, replay fixtures, and QC are retained. Generic open-source Seoul data clients may supply reusable patterns, but replacing the product-specific pipeline is not justified.
+
 ## Live integrations confirmed
 
 - Seoul Real-Time City Data: LIVE connection confirmed via XML endpoint.
 - KMA short-term forecast: LIVE connection confirmed and merging temperature/rain/precipitation/wind.
+- Open-Meteo/CAMS AQ: 48-hour PM2.5/PM10 **shadow forecast** collection confirmed; it does not affect public verdict/scoring.
 - Freshness metadata working.
 - Demo fallback remains explicit.
-
-## Most recent Yeouido real-data case
-
-Around 03:30 KST on 2026-08-29:
-- Seoul + KMA both live
-- 19:00 ≈ 86.7
-- 20:00 ≈ 87.0
-- 21:00 ≈ 83.8
-- Product verdict compressed broad good period to `19:00–21:00`
-- Recommended-slot crowd forecast was unavailable, so confidence should be capped at `보통`
+- Snapshot artifacts contain source metadata needed for later calibration.
 
 ## Important product semantics already decided
 
@@ -40,65 +44,99 @@ Around 03:30 KST on 2026-08-29:
 - Evening queries may include next-day 00:00–05:59 as “tonight”.
 - Unknown data is not a positive/negative observation.
 - Current AQ can act as safety context/gate but must not be claimed as future AQ.
-- A current AQ observation may gate only slots within 90 minutes of its observation time. Later slots require a future AQ forecast or remain explicitly unknown.
+- A current AQ observation may gate only slots within 90 minutes of its observation time. Later slots require a validated future AQ forecast or remain explicitly unknown.
+- AQ shadow data is observation/calibration input only until empirical validation is sufficient.
 - Missing crowd uses a neutral expected-utility value, plus a separate 6-point selection penalty until replay data can calibrate source/horizon-specific uncertainty.
 - Server verdict is the single decision source.
 - Recommendation windows should avoid fake precision.
 - Alternatives only appear for a meaningful, supported tradeoff.
 
-## Recent bugs fixed / guarded
+## Reliability / QC fixes now guarded
 
-- Seoul `citydata` must use XML, not JSON endpoint.
-- Seoul 24h forecast was accidentally truncated to 12 slots.
-- Current wind/crowd must not be copied into future slots.
-- KMA merge now updates provenance.
-- `crowd=null` must not create “quieter” claims or crowd alternatives.
+- Seoul `citydata` uses XML, not the unsupported JSON assumption.
+- Seoul 24h forecast is not truncated to 12 slots.
+- Current wind/crowd are never copied into future slots.
+- Missing/non-numeric values remain unknown rather than becoming benign zero/default values.
+- KMA partial rows merge field-by-field and cannot overwrite missing rain fields with zero.
+- KMA merge updates field-level provenance.
+- `crowd=null` cannot create “quieter” claims or crowd alternatives.
 - Missing important forecast inputs cap confidence.
-- Broad recommendation windows are compressed around the peak.
-- Public verdict end time is normalized to KST rather than mixing `Z` and `+09:00`.
-- Window-level reasons may include sunset when sunset lies inside the recommended window even if the single best slot is later.
-- Server auto-tries the next port when 4173 is occupied.
-- Missing forecast hours can no longer be presented as one continuous recommendation window.
-- Reasons and confidence are supported by the whole public window, not only the peak hour.
+- Broad recommendation windows are compressed around the peak without bridging missing hours.
+- Reasons and confidence must support the whole public window, not only the peak hour.
+- Public verdict timestamps are KST-normalized.
 - KMA is named as a source only when at least one field actually merges into a Seoul slot.
 - KMA base/grid/count/merge metadata is exposed and persisted; a late latest release retries exactly one prior base.
+- KMA requests ask for enough rows and QC fails on response truncation.
+- Windows QC writes UTF-8 directly rather than corrupting Korean through legacy PowerShell piping.
 - Bare Seoul sunset times are anchored to the source observation date for replay/midnight safety.
-- Demo dates follow the current Seoul date instead of a frozen 2026 fixture.
-- Non-finite optional score inputs cannot poison ranking, and all public verdict timestamps are KST-normalized.
-- Current AQ provenance now carries its observation time; expired observations cannot gate distant future slots or support positive AQ copy.
-- Expected utility and evidence quality are separated through `selectionScore`, so an unsupported crowd estimate must beat an evidence-backed candidate by a meaningful margin.
-- Current observed wind may fill only the matching current-hour slot; it is never copied into later forecast hours, and KMA replaces it when an hourly forecast exists.
+- Demo dates follow the current Seoul date.
+- Non-finite optional score inputs cannot poison ranking.
+- Current AQ provenance carries observation time; expired observations cannot gate distant future slots or support positive AQ copy.
+- Expected utility and evidence quality are separated through `selectionScore`.
+- Same-place concurrent cache misses are single-flighted so Seoul/KMA requests do not stampede; different parks remain parallel.
+- Failed in-flight requests are cleared so later requests can retry.
+- Live QC no longer treats “KMA key configured” as “KMA worked”: it requires actual KMA metadata, no truncation, a real merge, and source-specific coverage for actionable future slots.
+- A transient KMA timeout/408/425/429/5xx gets one bounded retry. Every retry receives a fresh timeout signal; deterministic failures are not hidden.
+- AQ shadow parsing preserves missing values as `null`; missing PM cannot become zero.
+
+## Uploaded prior QC review
+
+The earlier QC artifact exposed two historical issues:
+
+1. A KMA response with `totalCount=1052` and only 1000 received rows was marked `truncated=true` but still had `issues=[]`.
+2. Windows PowerShell output corrupted Korean text.
+
+Both were already corrected in the subsequent artifact (`receivedItems === totalCount`, `truncated=false`, UTF-8 output). The new QC is stricter again: it separately verifies actual KMA provenance/coverage rather than relying on overall values that may exist from Seoul fallback.
 
 ## Current validation status
 
-GitHub Actions runs tests on macOS / Windows / Linux. Remote HEAD `ee26935` passed run #32 on all three operating systems.
+The suite now includes regression coverage for live/replay semantics, missing-data honesty, in-flight dedupe, AQ shadow normalization, calibration pairing, transient retries, and fresh retry abort signals.
 
-The v0.6.3 follow-up commit `291c33d` passes 51 local tests, syntax/demo-server smoke checks, and GitHub Actions run #33 on Ubuntu, macOS, and Windows. In addition to the v0.6.2 uncertainty fixes, it closes the remaining policy-neutral review findings around time adjacency, window-level claims/confidence, actual KMA merge provenance, one-release KMA retry and metadata, source-date sunset anchoring, finite scoring, public KST timestamps, and dynamic demo dates.
+At commit `ec2cf6d`, the full unit suite passed 67 tests, while the newly strict LIVE-QC correctly failed because all six KMA calls timed out. This exposed a second retry bug: the first implementation reused an already-aborted `AbortSignal`, so the retry was not independent.
 
-The AQ/crowd policy commit `6eb76d6` passes 55 local tests and GitHub Actions run #35 on Ubuntu, macOS, and Windows. A Windows-side six-park run then confirmed all parks as LIVE/fresh with 24 hourly weather slots, 12 crowd-forecast slots, KST ends, and no recommendation contract issues. It exposed two QC-path defects: KMA returned 1,052 items while the request capped results at 1,000, and Windows PowerShell `Tee-Object` corrupted Korean output. Commit `3a57f51` requests 2,000 KMA rows, fails QC on truncation, writes UTF-8 directly, and passed CI run #37 on all three operating systems.
+Commit `f6bb4e1` gives every transient retry a fresh 7-second timeout signal and adds a regression test requiring distinct non-aborted signals. On GitHub Actions live-QC run #25, the strict six-park `npm run qc:live:auto` step then passed with Seoul, actual KMA coverage, and Open-Meteo AQ shadow enabled. Final screenshot/artifact upload for that run was still completing when this status was written.
 
-The post-fix Windows run confirmed `receivedItems === totalCount` (1,016), `truncated=false`, and complete KMA coverage for every still-actionable future slot. The latest normalized public-data records for all six parks are now a scrubbed replay fixture with no keys, and the suite passes 56 tests. `npm run qc:live:auto` now starts a temporary server on a free port, waits for health, runs six-park QC, writes evidence, and shuts down in one command. Codespaces and a manually triggered GitHub Actions LIVE-QC workflow are configured so machine-specific setup can be retired after the two repository secrets are registered once.
+No API key is stored in the repository or replay fixtures.
 
-See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
+## Calibration infrastructure
 
-A six-park QC runner is available as `npm run qc:live:auto`; it owns the server lifecycle and port selection. `npm run qc:live` remains available when validating an already running server.
+`npm run calibrate:snapshots -- <snapshot.jsonl> [more.jsonl ...]` is available.
 
-```bash
-EONJE_BASE_URL=http://127.0.0.1:4174 npm run qc:live
-```
+The evaluator pairs earlier forecasts with later observations for the same park/hour and reports:
 
-No API key is stored in the repository or replay fixture.
+- AQ: PM2.5 / PM10 count, MAE, bias, RMSE by lead-time bucket.
+- Crowd: exact accuracy, mean absolute ordinal error, and bias by lead-time bucket.
+
+Lead-time buckets are `1–3h`, `4–6h`, `7–12h`, `13–24h`, `25h+`.
+
+These are diagnostics only. Do **not** replace the 6-point crowd penalty, AQ policy, weights, or hard gates until there are enough observations across multiple dates, parks, weather/crowd regimes, and lead times.
+
+## Current first-screen / UX decision
+
+The latest live preview already preserves the intended hierarchy: verdict first, large recommendation window, then supported reasons. No substantial UI redesign is justified before calibration/reliability work; changing it now would be modification for its own sake.
 
 ## Immediate next steps
 
-1. Register `SEOUL_API_KEY` and `DATA_GO_KR_API_KEY` once as GitHub Actions secrets (and Codespaces secrets if browser development is desired), then run the `live-qc` workflow once.
-2. Add an hourly AQ provider abstraction and shadow-log candidate forecasts; compare Google Air Quality and Open-Meteo/CAMS against later Seoul observations by lead time.
-3. Build the calibration dataset and replace the bootstrap 6-point crowd penalty with source/horizon-specific empirical uncertainty; evaluate scoring weights / hard gates at the same time.
-4. Before substantial new product work, run a market/open-source Gate 0: comparable products, reusable implementations, differentiation, and build-vs-adapt decision.
-5. Only after that, polish UI / deployment / user testing and merge toward `main`.
+1. Let live-QC/snapshot artifacts accumulate across materially different observation times; run the offline calibration report against them.
+2. Add source-dimension timing/freshness diagnostics without changing current public quality semantics.
+3. Once sample sizes are sufficient, estimate crowd error by lead time and test replacements for the bootstrap 6-point penalty; evaluate weights/hard gates in the same offline harness.
+4. Evaluate Open-Meteo/CAMS AQ forecasts against later Seoul observations. Add Google Air Quality as a second shadow candidate only if/when its API key/billing setup is justified.
+5. Keep UI verdict-first; after calibration, perform targeted editorial/UX polish rather than dashboard expansion.
+6. Deployment/user-search validation comes after reliability/calibration. Do not merge to `main` yet.
+
+## User-intervention boundaries
+
+No user action is required for the current code/test/QC/calibration work.
+
+User input becomes appropriate only when one of these is reached:
+
+- choosing/authorizing a paid or billed external AQ provider such as Google Air Quality;
+- enabling a recurring scheduled GitHub Actions data-collection job that would consume ongoing Actions minutes;
+- choosing a hosting/domain/deployment account or accepting its cost/terms;
+- approving an empirically supported scoring-policy change if it materially changes product behavior.
 
 ## How to resume in a fresh ChatGPT session
 
 Tell the assistant:
 
-> Continue `noru358/eonje-app`. Read `docs/PROJECT_STATUS.md` and `docs/CODE_REVIEW_BRIEF.md` on branch `feat/live-data-v0.6`, inspect the latest CI, then continue from the immediate next steps. Treat the repository as source of truth; do not reconstruct implementation from memory.
+> Continue `noru358/eonje-app`. Read `docs/PROJECT_STATUS.md` and `docs/GATE0_MARKET_REUSE_20260901.md` on branch `feat/live-data-v0.6`, inspect the latest test + live-qc runs, then continue from the immediate next steps. Treat the repository as source of truth; do not reconstruct implementation from memory.

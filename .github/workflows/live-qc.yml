@@ -16,6 +16,7 @@ jobs:
     env:
       SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
       DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      AQ_SHADOW_PROVIDER: open-meteo
       STORE_SNAPSHOTS: "1"
     steps:
       - uses: actions/checkout@v4

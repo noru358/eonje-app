@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: eonje-staging
+    runtime: node
+    plan: free
+    region: singapore
+    branch: feat/live-data-v0.6
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SEOUL_API_KEY
+        sync: false
+      - key: DATA_GO_KR_API_KEY
+        sync: false
+      - key: AQ_SHADOW_PROVIDER
+        value: open-meteo
+      - key: STORE_SNAPSHOTS
+        value: "0"

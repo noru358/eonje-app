@@ -12,6 +12,7 @@ import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
 import { createInflightDeduper } from './src/inflight-dedupe.mjs';
+import { createTransientFetch } from './src/transient-fetch.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -44,6 +45,7 @@ function json(res, status, body) {
 const liveCache = new Map();
 const snapshotBuckets = new Set();
 const runInflight = createInflightDeduper();
+const fetchKmaWithRetry = createTransientFetch(fetch, { retries:1, delayMs:250 });
 
 function seoulDate(iso = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -87,7 +89,12 @@ async function fetchRealUncached(place) {
   let weatherSource = '서울특별시 실시간 도시데이터';
   if (DATA_GO_KR_API_KEY) {
     try {
-      const kma = await fetchKmaForecast({ serviceKey: DATA_GO_KR_API_KEY, lat: place.lat, lon: place.lon });
+      const kma = await fetchKmaForecast({
+        serviceKey: DATA_GO_KR_API_KEY,
+        lat: place.lat,
+        lon: place.lon,
+        fetchImpl:fetchKmaWithRetry
+      });
       const merge = mergeKmaIntoSlotsWithMeta(normalized.slots, kma.rows);
       const kmaMetadata = { ...kma.metadata, mergedSlotCount:merge.mergedSlotCount, mergedFields:merge.mergedFields };
       normalized = {

@@ -33,8 +33,6 @@ function isKmaField(slot, key) {
 
 function kmaCoverage(slots, nowTime) {
   const now = Number.isFinite(new Date(nowTime).getTime()) ? new Date(nowTime).getTime() : Date.now();
-  // Future decision slots only. Elapsed/current Seoul rows legitimately predate the
-  // newest KMA release and should not count against KMA forecast coverage.
   const actionable = slots.filter((slot) => new Date(slot.time).getTime() > now);
   return {
     actionable: actionable.length,
@@ -55,6 +53,7 @@ const rows = await Promise.all(places.map(async (place) => {
   const issues = [];
   const coverage = kmaCoverage(slots, city.nowTime);
   const kma = city.sourceMetadata?.kma;
+  const aqShadow = city.sourceMetadata?.aqShadow;
 
   if (city.mode !== 'live') issues.push(`mode=${city.mode || 'missing'}`);
   if (city.quality?.state !== 'fresh') issues.push(`quality=${city.quality?.state || 'missing'}`);
@@ -74,6 +73,13 @@ const rows = await Promise.all(places.map(async (place) => {
     }
   }
 
+  if (health.integrations?.aqShadow) {
+    if (city.aqShadowError) issues.push(`aq_shadow_error=${city.aqShadowError}`);
+    if (!aqShadow) issues.push('aq_shadow_metadata_missing');
+    if (aqShadow && aqShadow.provider !== 'open_meteo_cams') issues.push(`aq_shadow_provider=${aqShadow.provider || 'missing'}`);
+    if (aqShadow && !(aqShadow.rowCount >= 24)) issues.push(`aq_shadow_short=${aqShadow.rowCount || 0}`);
+  }
+
   return {
     place:place.id,
     mode:city.mode,
@@ -90,6 +96,7 @@ const rows = await Promise.all(places.map(async (place) => {
     },
     kmaCoverage:coverage,
     kmaError:city.kmaError || null,
+    aqShadowError:city.aqShadowError || null,
     verdict:{
       status:verdict.status,
       windowLabel:verdict.windowLabel || null,
@@ -106,8 +113,6 @@ const rows = await Promise.all(places.map(async (place) => {
 
 const report = { checkedAt:new Date().toISOString(), baseUrl:BASE_URL, health, parks:rows };
 const reportJson = `${JSON.stringify(report, null, 2)}\n`;
-// Let Node write UTF-8 directly. Windows PowerShell 5's Tee-Object converts
-// piped UTF-8 output through its legacy console encoding and corrupts Korean.
 if (OUTPUT_PATH) await writeFile(resolve(OUTPUT_PATH), reportJson, 'utf8');
 console.log(reportJson.trimEnd());
 

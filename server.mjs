@@ -12,8 +12,7 @@ import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
 import { createInflightDeduper } from './src/inflight-dedupe.mjs';
-import { createTransientFetch } from './src/transient-fetch.mjs';
-import { createConcurrencyLimiter } from './src/concurrency-limit.mjs';
+import { createQueuedTransientFetch } from './src/queued-transient-fetch.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -46,15 +45,9 @@ function json(res, status, body) {
 const liveCache = new Map();
 const snapshotBuckets = new Set();
 const runInflight = createInflightDeduper();
-const limitKmaFetch = createConcurrencyLimiter(2);
-const fetchKmaAttempt = (input, init = {}) => limitKmaFetch(() => fetch(input, {
-  ...init,
-  // The timeout clock starts only after this request has actually acquired an
-  // upstream slot. A queued request must not arrive with an already-aborted
-  // signal inherited from its wait in the concurrency limiter.
-  signal:AbortSignal.timeout(7000)
-}));
-const fetchKmaWithRetry = createTransientFetch(fetchKmaAttempt, {
+const fetchKmaWithRetry = createQueuedTransientFetch(fetch, {
+  maxConcurrent:2,
+  timeoutMs:7000,
   retries:1,
   delayMs:250
 });

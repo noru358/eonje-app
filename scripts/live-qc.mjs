@@ -22,6 +22,29 @@ function horizonHours(slots) {
   return Math.round((new Date(slots.at(-1).time) - new Date(slots[0].time)) / 3_600_000);
 }
 
+function isKmaField(slot, key) {
+  const provenance = slot?.provenance || {};
+  if (key === 'temp') return provenance.temp === 'kma_hourly_forecast';
+  if (key === 'rainChance') return provenance.rain === 'kma_hourly_forecast';
+  if (key === 'precipitation') return provenance.precipitation === 'kma_hourly_forecast';
+  if (key === 'wind') return provenance.wind === 'kma_hourly_forecast';
+  return false;
+}
+
+function kmaCoverage(slots, nowTime) {
+  const now = Number.isFinite(new Date(nowTime).getTime()) ? new Date(nowTime).getTime() : Date.now();
+  // Future decision slots only. Elapsed/current Seoul rows legitimately predate the
+  // newest KMA release and should not count against KMA forecast coverage.
+  const actionable = slots.filter((slot) => new Date(slot.time).getTime() > now);
+  return {
+    actionable: actionable.length,
+    temp: actionable.filter((slot) => isKmaField(slot, 'temp')).length,
+    rainChance: actionable.filter((slot) => isKmaField(slot, 'rainChance')).length,
+    precipitation: actionable.filter((slot) => isKmaField(slot, 'precipitation')).length,
+    wind: actionable.filter((slot) => isKmaField(slot, 'wind')).length
+  };
+}
+
 const health = await getJson('/api/health');
 const places = await getJson('/api/places');
 const rows = await Promise.all(places.map(async (place) => {
@@ -30,14 +53,27 @@ const rows = await Promise.all(places.map(async (place) => {
   const slots = city.slots || [];
   const verdict = result.verdict || {};
   const issues = [];
+  const coverage = kmaCoverage(slots, city.nowTime);
+  const kma = city.sourceMetadata?.kma;
+
   if (city.mode !== 'live') issues.push(`mode=${city.mode || 'missing'}`);
   if (city.quality?.state !== 'fresh') issues.push(`quality=${city.quality?.state || 'missing'}`);
   if (slots.length < 12) issues.push(`short_horizon=${slots.length}`);
   if (!verdict.best && verdict.status === 'go') issues.push('go_without_best');
   if (verdict.end && !String(verdict.end).endsWith('+09:00')) issues.push('end_not_kst');
-  if (city.sourceMetadata?.kma?.truncated) {
-    issues.push(`kma_truncated=${city.sourceMetadata.kma.receivedItems}/${city.sourceMetadata.kma.totalCount}`);
+
+  if (health.integrations?.kma) {
+    if (city.kmaError) issues.push(`kma_error=${city.kmaError}`);
+    if (!kma) issues.push('kma_metadata_missing');
+    if (kma?.truncated) issues.push(`kma_truncated=${kma.receivedItems}/${kma.totalCount}`);
+    if (kma && !(kma.mergedSlotCount > 0)) issues.push('kma_no_merge');
+    if (coverage.actionable > 0) {
+      for (const key of ['temp', 'rainChance', 'precipitation', 'wind']) {
+        if (coverage[key] < coverage.actionable) issues.push(`kma_${key}_coverage=${coverage[key]}/${coverage.actionable}`);
+      }
+    }
   }
+
   return {
     place:place.id,
     mode:city.mode,
@@ -52,6 +88,8 @@ const rows = await Promise.all(places.map(async (place) => {
       wind:countKnown(slots, 'wind'),
       crowd:countKnown(slots, 'crowd')
     },
+    kmaCoverage:coverage,
+    kmaError:city.kmaError || null,
     verdict:{
       status:verdict.status,
       windowLabel:verdict.windowLabel || null,

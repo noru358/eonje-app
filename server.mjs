@@ -7,6 +7,7 @@ import { mockCityData } from './src/mock-data.mjs';
 import { normalizeSeoulCityData } from './src/seoul-adapter.mjs';
 import { parseSeoulXml } from './src/seoul-xml.mjs';
 import { fetchKmaForecast, mergeKmaIntoSlotsWithMeta } from './src/kma-adapter.mjs';
+import { fetchOpenMeteoAirQuality } from './src/aq-open-meteo.mjs';
 import { makeProductVerdict } from './src/product-verdict.mjs';
 import { assessDataQuality } from './src/data-quality.mjs';
 import { loadEnvFile } from './src/env.mjs';
@@ -18,6 +19,7 @@ loadEnvFile(join(ROOT, '.env'));
 const PORT = Number(process.env.PORT || 4173);
 const SEOUL_API_KEY = process.env.SEOUL_API_KEY || '';
 const DATA_GO_KR_API_KEY = process.env.DATA_GO_KR_API_KEY || '';
+const AQ_SHADOW_PROVIDER = process.env.AQ_SHADOW_PROVIDER || '';
 const STORE_SNAPSHOTS = process.env.STORE_SNAPSHOTS === '1';
 const SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || join(ROOT, 'data', 'snapshots');
 
@@ -66,7 +68,8 @@ async function persistSnapshot(place, data) {
     nowTime: data.nowTime,
     sunset: data.sunset,
     current: data.current ?? null,
-    slots: data.slots
+    slots: data.slots,
+    aqShadow:data.aqShadow || null
   };
   await appendFile(file, `${JSON.stringify(record)}\n`, 'utf8');
   snapshotBuckets.add(dedupeKey);
@@ -98,6 +101,20 @@ async function fetchRealUncached(place) {
       normalized = { ...normalized, kmaError: error.message };
     }
   }
+
+  if (AQ_SHADOW_PROVIDER === 'open-meteo') {
+    try {
+      const aqShadow = await fetchOpenMeteoAirQuality({ lat:place.lat, lon:place.lon, forecastHours:48 });
+      normalized = {
+        ...normalized,
+        aqShadow,
+        sourceMetadata:{ ...(normalized.sourceMetadata || {}), aqShadow:aqShadow.metadata }
+      };
+    } catch (error) {
+      normalized = { ...normalized, aqShadowError:error.message };
+    }
+  }
+
   let data = { ...normalized, mode: 'live', source: weatherSource };
   try {
     await persistSnapshot(place, data);
@@ -126,7 +143,14 @@ async function getCityData(place) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') return json(res, 200, {
-    ok:true, version:'0.6.3', integrations:{ seoul:Boolean(SEOUL_API_KEY), kma:Boolean(DATA_GO_KR_API_KEY) }, snapshots:STORE_SNAPSHOTS
+    ok:true,
+    version:'0.6.3',
+    integrations:{
+      seoul:Boolean(SEOUL_API_KEY),
+      kma:Boolean(DATA_GO_KR_API_KEY),
+      aqShadow:AQ_SHADOW_PROVIDER || null
+    },
+    snapshots:STORE_SNAPSHOTS
   });
   if (url.pathname === '/api/places') return json(res, 200, PLACES);
   if (url.pathname === '/api/city' || url.pathname === '/api/verdict') {
@@ -145,7 +169,7 @@ async function handleApi(req, res, url) {
       place,
       data: {
         mode: data.mode, source: data.source, updatedAt: data.updatedAt, nowTime: data.nowTime,
-        liveError: data.liveError || null, kmaError: data.kmaError || null,
+        liveError: data.liveError || null, kmaError: data.kmaError || null, aqShadowError:data.aqShadowError || null,
         sourceMetadata:data.sourceMetadata || null,
         quality
       },

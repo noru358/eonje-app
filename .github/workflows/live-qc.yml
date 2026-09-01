@@ -1,6 +1,9 @@
 name: live-qc
 
 on:
+  push:
+    branches:
+      - feat/live-data-v0.6
   workflow_dispatch:
 
 permissions:

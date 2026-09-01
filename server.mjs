@@ -47,14 +47,17 @@ const liveCache = new Map();
 const snapshotBuckets = new Set();
 const runInflight = createInflightDeduper();
 const limitKmaFetch = createConcurrencyLimiter(2);
-const fetchKmaWithRetry = createTransientFetch(
-  (input, init) => limitKmaFetch(() => fetch(input, init)),
-  {
-    retries:1,
-    delayMs:250,
-    signalFactory:() => AbortSignal.timeout(7000)
-  }
-);
+const fetchKmaAttempt = (input, init = {}) => limitKmaFetch(() => fetch(input, {
+  ...init,
+  // The timeout clock starts only after this request has actually acquired an
+  // upstream slot. A queued request must not arrive with an already-aborted
+  // signal inherited from its wait in the concurrency limiter.
+  signal:AbortSignal.timeout(7000)
+}));
+const fetchKmaWithRetry = createTransientFetch(fetchKmaAttempt, {
+  retries:1,
+  delayMs:250
+});
 
 function seoulDate(iso = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

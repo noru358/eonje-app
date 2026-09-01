@@ -1,6 +1,7 @@
 const KST_SUFFIX = '+09:00';
 
 function finiteOrNull(value) {
+  if (value == null || String(value).trim() === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -25,7 +26,7 @@ export function normalizeOpenMeteoAirQuality(payload, { retrievedAt = new Date()
       provider:'open_meteo_cams',
       retrievedAt,
       timezone:payload?.timezone || 'Asia/Seoul',
-      utcOffsetSeconds:Number.isFinite(Number(payload?.utc_offset_seconds)) ? Number(payload.utc_offset_seconds) : null,
+      utcOffsetSeconds:finiteOrNull(payload?.utc_offset_seconds),
       latitude:finiteOrNull(payload?.latitude),
       longitude:finiteOrNull(payload?.longitude),
       rowCount:rows.length

@@ -195,7 +195,8 @@ export function mergeKmaIntoSlotsWithMeta(slots, kma) {
         temp: hasTemp ? 'kma_hourly_forecast' : (slot.provenance?.temp || slot.provenance?.weather || 'missing'),
         rain: hasRainChance ? 'kma_hourly_forecast' : (slot.provenance?.rain || slot.provenance?.weather || 'missing'),
         precipitation: hasPrecipitation ? 'kma_hourly_forecast' : (slot.provenance?.precipitation || slot.provenance?.weather || 'missing'),
-        wind: hasWind ? 'kma_hourly_forecast' : (slot.provenance?.wind || 'missing')
+        wind: hasWind ? 'kma_hourly_forecast' : (slot.provenance?.wind || 'missing'),
+        windObservedAt: hasWind ? null : (slot.provenance?.windObservedAt || null)
       },
       weatherSource: hasWeather || hasWind ? 'KMA' : slot.weatherSource
     };

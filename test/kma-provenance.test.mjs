@@ -12,5 +12,6 @@ test('KMA merge updates weather and wind provenance', () => {
   assert.equal(out.weatherSource, 'KMA');
   assert.equal(out.provenance.weather, 'kma_hourly_forecast');
   assert.equal(out.provenance.wind, 'kma_hourly_forecast');
+  assert.equal(out.provenance.windObservedAt, null);
   assert.equal(out.wind, 0.1);
 });

@@ -1,0 +1,40 @@
+name: live-qc
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-qc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+      DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      STORE_SNAPSHOTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require live API secrets
+        shell: bash
+        run: |
+          if [ -z "$SEOUL_API_KEY" ] || [ -z "$DATA_GO_KR_API_KEY" ]; then
+            echo "Configure SEOUL_API_KEY and DATA_GO_KR_API_KEY as GitHub Actions secrets."
+            exit 1
+          fi
+      - run: npm test
+      - run: npm run qc:live:auto
+      - name: Upload QC evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-qc-${{ github.run_id }}
+          path: |
+            live-qc.json
+            live-qc-server.log
+            data/snapshots/*.jsonl
+          if-no-files-found: warn

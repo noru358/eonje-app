@@ -100,6 +100,13 @@ function nearestPopulation(popForecast, weatherIso, referenceDate) {
   return delta <= 45 * 60 * 1000 ? best : null;
 }
 
+function sameHour(a, b) {
+  const aMs = new Date(a).getTime();
+  const bMs = new Date(b).getTime();
+  return Number.isFinite(aMs) && Number.isFinite(bMs)
+    && Math.floor(aMs / 3_600_000) === Math.floor(bMs / 3_600_000);
+}
+
 export function normalizeSeoulCityData(payload, { referenceDate = new Date() } = {}) {
   const row = findCityRow(payload);
   if (!row) throw new Error('Seoul API response shape not recognized');
@@ -116,6 +123,7 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
   const populationObservedAt = toIsoSeoul(live.PPLTN_TIME, referenceDate);
   const currentTime = weatherObservedAt || populationObservedAt;
   const sourceDateReference = currentTime ? new Date(currentTime) : referenceDate;
+  const observedWind = parseNum(weather.WIND_SPD);
 
   const slots = weatherForecast.map((f) => {
     const time = toIsoSeoul(f.FCST_DT || f.FCST_TIME, referenceDate);
@@ -124,6 +132,7 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
     const pm25 = parseNum(weather.PM25);
     const pm10 = parseNum(weather.PM10);
     const uv = parseNum(weather.UV_INDEX);
+    const wind = Number.isFinite(observedWind) && sameHour(time, weatherObservedAt) ? observedWind : null;
     return {
       time,
       temp: parseNum(f.TEMP),
@@ -131,7 +140,7 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
       precipitation: parseNum(f.PRECIPITATION),
       // Seoul citydata provides hourly temperature/rain, but wind/air/UV are current observations.
       // Do not pretend the current wind is an hourly forecast. KMA can fill wind later.
-      wind: null,
+      wind,
       pm25,
       pm10,
       uv,
@@ -139,7 +148,8 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
       eventImpact: 0,
       provenance: {
         weather: 'seoul_hourly_forecast',
-        wind: 'missing_until_kma',
+        wind: Number.isFinite(wind) ? 'current_observation' : 'missing_until_kma',
+        windObservedAt: Number.isFinite(wind) ? weatherObservedAt : null,
         air: Number.isFinite(pm25) || Number.isFinite(pm10) ? 'current_observation' : 'missing',
         airObservedAt: Number.isFinite(pm25) || Number.isFinite(pm10) ? weatherObservedAt : null,
         uv: Number.isFinite(uv) ? 'current_observation' : 'missing',

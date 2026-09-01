@@ -1,0 +1,23 @@
+{
+  "name": "eonje-app",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "postCreateCommand": "npm test",
+  "forwardPorts": [4173],
+  "portsAttributes": {
+    "4173": {
+      "label": "eonje-app",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "containerEnv": {
+    "STORE_SNAPSHOTS": "1"
+  },
+  "secrets": {
+    "SEOUL_API_KEY": {
+      "description": "서울 열린데이터광장 인증키"
+    },
+    "DATA_GO_KR_API_KEY": {
+      "description": "공공데이터포털 기상청 단기예보 서비스키"
+    }
+  }
+}

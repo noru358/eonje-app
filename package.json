@@ -9,7 +9,8 @@
     "test": "node --test",
     "check": "node --test",
     "qc:live": "node scripts/live-qc.mjs",
-    "qc:live:file": "node scripts/live-qc.mjs --output live-qc.json"
+    "qc:live:file": "node scripts/live-qc.mjs --output live-qc.json",
+    "qc:live:auto": "node scripts/run-live-qc.mjs"
   },
   "engines": {
     "node": ">=20"

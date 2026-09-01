@@ -22,6 +22,9 @@ test('Seoul live adapter keeps the full 24h horizon and does not fake future win
   };
   const r = normalizeSeoulCityData(payload, { referenceDate:new Date('2026-08-28T15:10:00Z') });
   assert.equal(r.slots.length, 24);
+  assert.equal(r.slots[0].wind, 1.2);
+  assert.equal(r.slots[0].provenance.wind, 'current_observation');
+  assert.equal(r.slots[0].provenance.windObservedAt, '2026-08-29T00:10:00+09:00');
   assert.equal(r.slots[1].wind, null);
   assert.equal(r.slots[1].crowd, '보통');
   assert.equal(r.slots[5].crowd, null);

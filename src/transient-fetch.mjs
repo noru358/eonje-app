@@ -10,13 +10,17 @@ export function createTransientFetch(fetchImpl = fetch, {
   retries = 1,
   delayMs = 250,
   retryableStatus = DEFAULT_RETRYABLE_STATUS,
+  signalFactory = null,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 } = {}) {
-  return async function transientFetch(input, init) {
+  return async function transientFetch(input, init = {}) {
     let lastError;
     for (let attempt = 0; attempt <= retries; attempt++) {
+      const attemptInit = signalFactory
+        ? { ...init, signal:signalFactory({ attempt, input, init }) }
+        : init;
       try {
-        const response = await fetchImpl(input, init);
+        const response = await fetchImpl(input, attemptInit);
         if (!retryableStatus.has(response.status) || attempt === retries) return response;
         lastError = new Error(`Transient HTTP ${response.status}`);
       } catch (error) {

@@ -14,6 +14,12 @@ function appendDetail(existing, detail) {
   return existing.includes(detail) ? existing : `${existing} · ${detail}`;
 }
 
+function hasExpiredCurrentAir(slot, current) {
+  if (slot?.provenance?.air !== 'current_observation' || !slot?.time) return false;
+  const observedAt = slot.provenance.airObservedAt || current?.time;
+  return !observedAt || minutesBetween(slot.time, observedAt) > 90;
+}
+
 export function sanitizeVerdict(verdict, data = {}) {
   if (!verdict || verdict.status !== 'go') return verdict;
 
@@ -53,7 +59,8 @@ export function sanitizeVerdict(verdict, data = {}) {
 
   // A current air-quality observation can still protect as a safety gate, but it
   // must not be phrased as a future-hour benefit when the recommended slot is far away.
-  if (supportSlots.some((slot) => slot?.provenance?.air === 'current_observation' && current?.time && slot?.time && minutesBetween(slot.time, current.time) > 90)) {
+  const missingFutureAir = supportSlots.some((slot) => hasExpiredCurrentAir(slot, current));
+  if (missingFutureAir) {
     next.reasons = next.reasons.filter((reason) => reason?.icon !== 'air');
   }
 
@@ -62,6 +69,7 @@ export function sanitizeVerdict(verdict, data = {}) {
   if (supportSlots.some((slot) => !Number.isFinite(slot?.wind))) missing.push('추천 구간 풍속 예보 없음');
   if (supportSlots.some((slot) => !Number.isFinite(slot?.temp))) missing.push('추천 구간 기온 예보 없음');
   if (supportSlots.some((slot) => !Number.isFinite(slot?.rainChance) || !Number.isFinite(slot?.precipitation))) missing.push('추천 구간 강수 예보 불완전');
+  if (missingFutureAir) missing.push('추천 구간 대기질 예보 없음');
 
   // Crowd is 34% of utility, and weather includes wind. Missing either materially
   // weakens a "high confidence" claim even if the available components score well.

@@ -7,6 +7,24 @@ export const CROWD_SCORE = {
   '붐빔': 24
 };
 
+// Bootstrap policy until replay data can calibrate source/horizon-specific risk.
+// Keep expected utility and evidence quality separate: the public score still uses
+// a neutral crowd prior, while ranking pays a modest penalty for no crowd evidence.
+export const UNKNOWN_CROWD_PENALTY = 6;
+export const CURRENT_AIR_VALID_MINUTES = 90;
+
+function hasKnownCrowd(crowd) {
+  return Object.hasOwn(CROWD_SCORE, crowd);
+}
+
+function airIsValidForSlot(slot) {
+  if (slot?.provenance?.air !== 'current_observation') return true;
+  const slotMs = new Date(slot.time).getTime();
+  const observedMs = new Date(slot.provenance.airObservedAt).getTime();
+  return Number.isFinite(slotMs) && Number.isFinite(observedMs)
+    && Math.abs(slotMs - observedMs) <= CURRENT_AIR_VALID_MINUTES * 60 * 1000;
+}
+
 function tempScore(t) {
   if (!Number.isFinite(t)) return 70;
   if (t >= 20 && t <= 26) return 100;
@@ -98,14 +116,15 @@ export function hardGate(slot) {
   if (Number.isFinite(slot.precipitation) && slot.precipitation >= 2) return '강한 비';
   if (Number.isFinite(slot.temp) && slot.temp >= 33) return '너무 더움';
   if (Number.isFinite(slot.temp) && slot.temp <= -5) return '너무 추움';
-  if ((Number.isFinite(slot.pm25) && slot.pm25 >= 76) || (Number.isFinite(slot.pm10) && slot.pm10 >= 151)) return '대기질 나쁨';
+  if (airIsValidForSlot(slot)
+    && ((Number.isFinite(slot.pm25) && slot.pm25 >= 76) || (Number.isFinite(slot.pm10) && slot.pm10 >= 151))) return '대기질 나쁨';
   if (Number.isFinite(slot.wind) && slot.wind >= 11) return '바람이 너무 강함';
   return null;
 }
 
 export function scoreSlot(slot, context = {}) {
   const gate = hardGate(slot);
-  if (gate) return { score: -999, gated: true, gate, components: {} };
+  if (gate) return { score: -999, selectionScore: -999, uncertaintyPenalty: 0, gated: true, gate, components: {} };
 
   // Only time-varying inputs should materially determine *when* to go.
   // Air quality remains a safety gate until we have trustworthy hourly forecasts.
@@ -120,8 +139,11 @@ export function scoreSlot(slot, context = {}) {
   const eventAdjustment = Number.isFinite(slot.eventImpact) ? slot.eventImpact : 0;
   const timeAdjustment = timePreferenceAdjustment(slot, context.intent || 'general');
   const score = clamp(weather * 0.46 + crowd * 0.34 + experience * 0.20 + eventAdjustment + timeAdjustment);
+  const uncertaintyPenalty = hasKnownCrowd(slot.crowd) ? 0 : UNKNOWN_CROWD_PENALTY;
   return {
     score: Math.round(score * 10) / 10,
+    selectionScore: Math.round((score - uncertaintyPenalty) * 10) / 10,
+    uncertaintyPenalty,
     gated: false,
     components: {
       weather: Math.round(weather),
@@ -267,14 +289,15 @@ function findMeaningfulAlternative(scored, bestIndex, primaryWindow) {
 
 function contiguousWindow(scored, bestIndex, tolerance = 5.5) {
   const best = scored[bestIndex];
+  const decisionScore = (slot) => Number.isFinite(slot.selectionScore) ? slot.selectionScore : slot.score;
   let left = bestIndex;
   let right = bestIndex;
   const adjacent = (earlier, later) => {
     const delta = new Date(later.time).getTime() - new Date(earlier.time).getTime();
     return Number.isFinite(delta) && delta > 0 && delta <= 61 * 60 * 1000;
   };
-  while (left > 0 && adjacent(scored[left - 1], scored[left]) && !scored[left - 1].gated && best.score - scored[left - 1].score <= tolerance) left--;
-  while (right < scored.length - 1 && adjacent(scored[right], scored[right + 1]) && !scored[right + 1].gated && best.score - scored[right + 1].score <= tolerance) right++;
+  while (left > 0 && adjacent(scored[left - 1], scored[left]) && !scored[left - 1].gated && decisionScore(best) - decisionScore(scored[left - 1]) <= tolerance) left--;
+  while (right < scored.length - 1 && adjacent(scored[right], scored[right + 1]) && !scored[right + 1].gated && decisionScore(best) - decisionScore(scored[right + 1]) <= tolerance) right++;
   return { left, right };
 }
 
@@ -304,7 +327,8 @@ export function makeVerdict({ place, slots, sunset, nowTime, current = null, int
     };
   }
 
-  let bestIndex = scored.findIndex((slot) => !slot.gated && Number.isFinite(slot.score));
+  const decisionScore = (slot) => Number.isFinite(slot.selectionScore) ? slot.selectionScore : slot.score;
+  let bestIndex = scored.findIndex((slot) => !slot.gated && Number.isFinite(decisionScore(slot)));
   if (bestIndex < 0) {
     return {
       status: 'avoid', headline: '오늘은 추천을 계산하기 어렵다.',
@@ -312,7 +336,7 @@ export function makeVerdict({ place, slots, sunset, nowTime, current = null, int
     };
   }
   scored.forEach((s, i) => {
-    if (!s.gated && Number.isFinite(s.score) && s.score > scored[bestIndex].score) bestIndex = i;
+    if (!s.gated && Number.isFinite(decisionScore(s)) && decisionScore(s) > decisionScore(scored[bestIndex])) bestIndex = i;
   });
   const best = scored[bestIndex];
   const window = contiguousWindow(scored, bestIndex);

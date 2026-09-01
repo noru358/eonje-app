@@ -27,6 +27,24 @@ test('unknown best crowd removes people claim and crowd alternative', () => {
   assert.match(out.confidenceDetail, /혼잡 예측 없음/);
 });
 
+test('expired current air is disclosed as missing forecast and caps confidence', () => {
+  const out = sanitizeVerdict({
+    status:'go', confidence:'높음', start:'2026-08-29T20:00:00+09:00', end:'2026-08-29T21:00:00+09:00',
+    best:{
+      time:'2026-08-29T20:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통', pm25:12,
+      provenance:{ air:'current_observation', airObservedAt:'2026-08-29T17:00:00+09:00' }
+    },
+    scored:[{
+      time:'2026-08-29T20:00:00+09:00', temp:24, rainChance:0, precipitation:0, wind:1, crowd:'보통', pm25:12,
+      provenance:{ air:'current_observation', airObservedAt:'2026-08-29T17:00:00+09:00' }
+    }],
+    reasons:[{ icon:'air', title:'공기도 무난함', detail:'초미세먼지 12' }]
+  }, { current:{ time:'2026-08-29T17:00:00+09:00' } });
+  assert.equal(out.confidence, '보통');
+  assert.equal(out.reasons.some((reason) => reason.icon === 'air'), false);
+  assert.match(out.confidenceDetail, /대기질 예보 없음/);
+});
+
 test('unknown crowd removes crowd comparison from a non-crowd alternative tradeoff', () => {
   const out = sanitizeVerdict({
     status:'go', confidence:'보통',

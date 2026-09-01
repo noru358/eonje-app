@@ -1,6 +1,6 @@
 # 언제(eonje-app) — Current Project Status
 
-Updated: 2026-08-29 KST (v0.6.3 review follow-up)
+Updated: 2026-09-02 KST (AQ/crowd uncertainty policy)
 
 ## Current branch
 
@@ -40,6 +40,8 @@ Around 03:30 KST on 2026-08-29:
 - Evening queries may include next-day 00:00–05:59 as “tonight”.
 - Unknown data is not a positive/negative observation.
 - Current AQ can act as safety context/gate but must not be claimed as future AQ.
+- A current AQ observation may gate only slots within 90 minutes of its observation time. Later slots require a future AQ forecast or remain explicitly unknown.
+- Missing crowd uses a neutral expected-utility value, plus a separate 6-point selection penalty until replay data can calibrate source/horizon-specific uncertainty.
 - Server verdict is the single decision source.
 - Recommendation windows should avoid fake precision.
 - Alternatives only appear for a meaningful, supported tradeoff.
@@ -63,12 +65,16 @@ Around 03:30 KST on 2026-08-29:
 - Bare Seoul sunset times are anchored to the source observation date for replay/midnight safety.
 - Demo dates follow the current Seoul date instead of a frozen 2026 fixture.
 - Non-finite optional score inputs cannot poison ranking, and all public verdict timestamps are KST-normalized.
+- Current AQ provenance now carries its observation time; expired observations cannot gate distant future slots or support positive AQ copy.
+- Expected utility and evidence quality are separated through `selectionScore`, so an unsupported crowd estimate must beat an evidence-backed candidate by a meaningful margin.
 
 ## Current validation status
 
 GitHub Actions runs tests on macOS / Windows / Linux. Remote HEAD `ee26935` passed run #32 on all three operating systems.
 
 The v0.6.3 follow-up commit `291c33d` passes 51 local tests, syntax/demo-server smoke checks, and GitHub Actions run #33 on Ubuntu, macOS, and Windows. In addition to the v0.6.2 uncertainty fixes, it closes the remaining policy-neutral review findings around time adjacency, window-level claims/confidence, actual KMA merge provenance, one-release KMA retry and metadata, source-date sunset anchoring, finite scoring, public KST timestamps, and dynamic demo dates.
+
+The AQ/crowd policy patch passes 55 local tests. A live six-park run was attempted with both user-provided public-data keys, but the hosted execution environment blocked the outbound API call before it reached Seoul/KMA. No key was written to the repository. Real Windows-side QC therefore remains the next external validation gate.
 
 See `docs/CODE_REVIEW_RESULT.md` for the full findings and remaining P2/calibration work.
 
@@ -85,9 +91,10 @@ The current review runtime did not contain either API key, so only the runner's 
 1. With both API keys configured, run `npm start` and `npm run qc:live`.
 2. Confirm all six parks, especially Yeouido: `windowLabel`, supported `reasons`, `confidenceDetail`, `best.provenance`, KST `end`, completeness counts, and forecast horizon.
 3. Save scrubbed real Seoul/KMA fixtures and add snapshot/replay tests using the new source/base/merge metadata.
-4. Decide and document the validity horizon for current AQ and the uncertainty policy for missing crowd forecasts.
-5. Build the calibration dataset and evaluate scoring weights / hard gates empirically.
-6. Only after that, polish UI / deployment / user testing and merge toward `main`.
+4. Add an hourly AQ provider abstraction and shadow-log candidate forecasts; compare Google Air Quality and Open-Meteo/CAMS against later Seoul observations by lead time.
+5. Build the calibration dataset and replace the bootstrap 6-point crowd penalty with source/horizon-specific empirical uncertainty; evaluate scoring weights / hard gates at the same time.
+6. Before substantial new product work, run a market/open-source Gate 0: comparable products, reusable implementations, differentiation, and build-vs-adapt decision.
+7. Only after that, polish UI / deployment / user testing and merge toward `main`.
 
 ## How to resume in a fresh ChatGPT session
 

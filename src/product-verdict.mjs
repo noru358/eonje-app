@@ -53,7 +53,8 @@ function headlineFromActualNow(verdict, nowIso) {
 }
 
 function chooseGo(a, b) {
-  if (a?.status === 'go' && b?.status === 'go') return (a.best?.score ?? -Infinity) >= (b.best?.score ?? -Infinity) ? a : b;
+  const decisionScore = (slot) => Number.isFinite(slot?.selectionScore) ? slot.selectionScore : (slot?.score ?? -Infinity);
+  if (a?.status === 'go' && b?.status === 'go') return decisionScore(a.best) >= decisionScore(b.best) ? a : b;
   if (a?.status === 'go') return a;
   if (b?.status === 'go') return b;
   if (a?.status === 'avoid' || b?.status === 'avoid') return a?.status === 'avoid' ? a : b;
@@ -66,14 +67,16 @@ function compressPrimaryWindow(verdict, nowIso) {
   if (bestIndex < 0) return verdict;
 
   const best = verdict.scored[bestIndex];
+  const decisionScore = (slot) => Number.isFinite(slot?.selectionScore) ? slot.selectionScore : slot?.score;
   const neighbors = [bestIndex - 1, bestIndex + 1]
     .filter((i) => i >= 0 && i < verdict.scored.length)
     .map((i) => ({ index:i, slot:verdict.scored[i] }))
     .filter(({ slot }) => {
       const delta = Math.abs(new Date(slot.time).getTime() - new Date(best.time).getTime());
-      return delta > 0 && delta <= 61 * 60 * 1000 && !slot.gated && Number.isFinite(slot.score) && best.score - slot.score <= 4.0;
+      return delta > 0 && delta <= 61 * 60 * 1000 && !slot.gated
+        && Number.isFinite(decisionScore(slot)) && decisionScore(best) - decisionScore(slot) <= 4.0;
     })
-    .sort((a, b) => b.slot.score - a.slot.score);
+    .sort((a, b) => decisionScore(b.slot) - decisionScore(a.slot));
 
   let start = best.time;
   let end = toSeoulIso(new Date(new Date(best.time).getTime() + 60 * 60 * 1000).toISOString());

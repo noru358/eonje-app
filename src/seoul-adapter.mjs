@@ -141,6 +141,7 @@ export function normalizeSeoulCityData(payload, { referenceDate = new Date() } =
         weather: 'seoul_hourly_forecast',
         wind: 'missing_until_kma',
         air: Number.isFinite(pm25) || Number.isFinite(pm10) ? 'current_observation' : 'missing',
+        airObservedAt: Number.isFinite(pm25) || Number.isFinite(pm10) ? weatherObservedAt : null,
         uv: Number.isFinite(uv) ? 'current_observation' : 'missing',
         crowd: crowd ? 'seoul_population_forecast' : 'unknown'
       }

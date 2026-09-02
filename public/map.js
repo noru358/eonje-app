@@ -30,11 +30,18 @@ tile.on('tileerror',()=>{if(!tileLoaded)failure.hidden=false;});
 tile.addTo(map);
 
 function scoreOf(v){return Number.isFinite(v?.best?.selectionScore)?v.best.selectionScore:Number.isFinite(v?.best?.score)?v.best.score:-9999;}
-function markerIcon(active=false){
-  return L.divIcon({className:'',html:`<div class="park-marker ${active?'active':''}"></div>`,iconSize:active?[30,40]:[24,32],iconAnchor:active?[15,38]:[12,30]});
+function markerIcon(place,active=false){
+  return L.divIcon({
+    className:'',
+    html:`<div class="park-marker-wrap ${active?'active':''}"><div class="park-marker-label">${place.shortName}</div><div class="park-marker"></div></div>`,
+    iconSize:[110,58],iconAnchor:[55,54]
+  });
 }
 function setActiveMarker(id){
-  markers.forEach((marker,key)=>marker.setIcon(markerIcon(key===id)));
+  markers.forEach((marker,key)=>{
+    const place=PLACES.find(p=>p.id===key);
+    marker.setIcon(markerIcon(place,key===id));
+  });
   document.querySelectorAll('.park-pill').forEach(el=>el.classList.toggle('active',el.dataset.id===id));
 }
 function renderIntents(){
@@ -100,7 +107,7 @@ async function refreshOverview(selectBest=false){
 }
 
 PLACES.forEach(place=>{
-  const marker=L.marker([place.lat,place.lon],{icon:markerIcon(place.id===currentPlace),title:place.name}).addTo(map);
+  const marker=L.marker([place.lat,place.lon],{icon:markerIcon(place,place.id===currentPlace),title:place.name}).addTo(map);
   marker.on('click',()=>selectPark(place.id,{pan:false}));markers.set(place.id,marker);
 });
 const bounds=L.latLngBounds(PLACES.map(p=>[p.lat,p.lon]));map.fitBounds(bounds.pad(.1),{padding:[34,34]});

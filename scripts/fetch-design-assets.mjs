@@ -3,37 +3,28 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const target = join(ROOT, 'public', 'assets', 'hanriver-spring-sunset.png');
-const source = 'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_091335_c0b42e8b-cf7e-432d-abba-295ff689b902.png';
-const EXPECTED_SHA256 = '8f9bc95005bad23a493e3fdb6ca86fa94ba89fa54fe0a1d462804c0f8b152f5f';
-const EXPECTED_WIDTH = 2752;
-const EXPECTED_HEIGHT = 1536;
-
-function sha256(bytes){ return createHash('sha256').update(bytes).digest('hex'); }
-function pngDimensions(bytes){
-  if(bytes.length < 24 || bytes.subarray(1,4).toString('ascii') !== 'PNG') throw new Error('not a PNG');
-  return {width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};
+const ROOT=fileURLToPath(new URL('..',import.meta.url));
+const BASE={
+  path:'public/assets/hanriver-spring-sunset.png',
+  source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_091335_c0b42e8b-cf7e-432d-abba-295ff689b902.png',
+  sha256:'8f9bc95005bad23a493e3fdb6ca86fa94ba89fa54fe0a1d462804c0f8b152f5f',width:2752,height:1536,required:true
+};
+const SCENES=[
+  {path:'public/assets/scenes/mangwon/spring/master.png',source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_095141_72298e28-deae-442f-aee6-f3c6b594e340.png',width:1376,height:768},
+  {path:'public/assets/scenes/yeouido/spring/master.png',source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_095141_f44aee01-9690-4f00-9336-dc985749b7cf.png',width:1376,height:768},
+  {path:'public/assets/scenes/ichon/spring/master.png',source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_095141_ebfce0f5-a3f7-4780-83b5-1267c39c0813.png',width:1376,height:768},
+  {path:'public/assets/scenes/banpo/spring/master.png',source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_095141_48cee21f-b721-4037-bf23-bb4b6328a09b.png',width:1376,height:768},
+  {path:'public/assets/scenes/jamsil/spring/master.png',source:'https://d8j0ntlcm91z4.cloudfront.net/user_3IUSVXbiZ0tsNqdqqpOsx4mWnu0/hf_20260902_095141_4058281a-2672-4e7c-8b16-40a02debfa37.png',width:1376,height:768}
+];
+function sha256(bytes){return createHash('sha256').update(bytes).digest('hex')}
+function pngDimensions(bytes){if(bytes.length<24||bytes.subarray(1,4).toString('ascii')!=='PNG')throw new Error('not a PNG');return{width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)}}
+function validate(bytes,item){const {width,height}=pngDimensions(bytes);if(width!==item.width||height!==item.height)throw new Error(`unexpected dimensions ${width}x${height}`);if(item.sha256&&sha256(bytes)!==item.sha256)throw new Error('unexpected hash');return{width,height,hash:sha256(bytes)}}
+async function ensure(item){const target=join(ROOT,item.path);try{const existing=await readFile(target);const meta=validate(existing,item);return{status:'verified',...meta}}catch{}
+  await mkdir(dirname(target),{recursive:true});
+  const response=await fetch(item.source,{signal:AbortSignal.timeout(25_000)});if(!response.ok)throw new Error(`HTTP ${response.status}`);
+  const bytes=Buffer.from(await response.arrayBuffer());const meta=validate(bytes,item);await writeFile(target,bytes);return{status:'downloaded',...meta,size:bytes.length};
 }
-function validate(bytes){
-  const hash=sha256(bytes);
-  const {width,height}=pngDimensions(bytes);
-  if(hash!==EXPECTED_SHA256) throw new Error(`unexpected asset hash: ${hash}`);
-  if(width!==EXPECTED_WIDTH||height!==EXPECTED_HEIGHT) throw new Error(`unexpected asset dimensions: ${width}x${height}`);
-  return {hash,width,height};
-}
-
-try {
-  const existing=await readFile(target);
-  const meta=validate(existing);
-  console.log(`design asset verified → ${meta.width}x${meta.height} sha256:${meta.hash.slice(0,12)}`);
-  process.exit(0);
-} catch {}
-
-await mkdir(dirname(target),{recursive:true});
-const response=await fetch(source,{signal:AbortSignal.timeout(20_000)});
-if(!response.ok) throw new Error(`design asset download failed: HTTP ${response.status}`);
-const bytes=Buffer.from(await response.arrayBuffer());
-const meta=validate(bytes);
-await writeFile(target,bytes);
-console.log(`design asset downloaded+verified → ${(bytes.length/1024/1024).toFixed(1)} MB ${meta.width}x${meta.height} sha256:${meta.hash.slice(0,12)}`);
+const baseMeta=await ensure(BASE);console.log(`design base ${baseMeta.status} → ${baseMeta.width}x${baseMeta.height} sha256:${baseMeta.hash.slice(0,12)}`);
+let ready=0;
+for(const item of SCENES){try{const meta=await ensure(item);ready++;console.log(`scene ${meta.status} → ${item.path}`)}catch(error){console.warn(`scene unavailable → ${item.path}: ${error.message}`)}}
+console.log(`scene masters ready → ${ready}/${SCENES.length}; missing combinations use the verified base artwork + seasonal/daypart retouch`);

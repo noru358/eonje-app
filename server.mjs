@@ -16,6 +16,7 @@ import { createQueuedTransientFetch } from './src/queued-transient-fetch.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
+const LEAFLET_DIST = join(ROOT, 'node_modules', 'leaflet', 'dist');
 loadEnvFile(join(ROOT, '.env'));
 const PORT = Number(process.env.PORT || 4173);
 const SEOUL_API_KEY = process.env.SEOUL_API_KEY || '';
@@ -27,14 +28,15 @@ const SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || join(ROOT, 'data', 'snapshots')
 const mime = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml'
+  '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.gif': 'image/gif'
 };
 
 const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
-  'content-security-policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  'content-security-policy': "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; style-src 'self'; script-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 };
 
 function json(res, status, body) {
@@ -191,25 +193,39 @@ async function handleApi(req, res, url) {
   return false;
 }
 
-async function serveStatic(req, res, pathname) {
-  let p = pathname === '/' ? '/index.html' : pathname;
-  p = normalize(p).replace(/^(\.\.[/\\])+/, '');
-  const file = join(PUBLIC, p);
-  if (!file.startsWith(PUBLIC)) return false;
+async function serveFile(res, file, cacheControl = 'public, max-age=300') {
   try {
     const st = await stat(file);
     if (!st.isFile()) return false;
     const body = await readFile(file);
-    const cacheControl = extname(file) === '.html' ? 'no-cache' : 'public, max-age=300';
     res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': mime[extname(file)] || 'application/octet-stream', 'cache-control': cacheControl });
     res.end(body);
     return true;
   } catch { return false; }
 }
 
+async function serveStatic(req, res, pathname) {
+  let p = pathname === '/' ? '/index.html' : pathname;
+  p = normalize(p).replace(/^(\.\.[/\\])+/, '');
+  const file = join(PUBLIC, p);
+  if (!file.startsWith(PUBLIC)) return false;
+  return serveFile(res, file, extname(file) === '.html' ? 'no-cache' : 'public, max-age=300');
+}
+
+async function serveLeaflet(res, pathname) {
+  const relative = normalize(pathname.replace('/vendor/leaflet/', '')).replace(/^(\.\.[/\\])+/, '');
+  const file = join(LEAFLET_DIST, relative);
+  if (!file.startsWith(LEAFLET_DIST)) return false;
+  return serveFile(res, file, 'public, max-age=86400');
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname.startsWith('/vendor/leaflet/')) {
+      if (await serveLeaflet(res, url.pathname)) return;
+      res.writeHead(404, SECURITY_HEADERS); res.end('Leaflet asset not found'); return;
+    }
     if (url.pathname.startsWith('/module/')) {
       const modPath = url.pathname.replace('/module/', '');
       const file = join(ROOT, 'src', modPath);

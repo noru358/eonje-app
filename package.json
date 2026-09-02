@@ -13,6 +13,9 @@
     "qc:live:auto": "node scripts/run-live-qc.mjs",
     "calibrate:snapshots": "node scripts/calibrate-snapshots.mjs"
   },
+  "dependencies": {
+    "leaflet": "1.9.4"
+  },
   "engines": {
     "node": ">=20"
   }

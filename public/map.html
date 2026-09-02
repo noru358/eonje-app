@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#d7e6f3" />
   <meta name="description" content="한강공원 실제 위치와 오늘의 추천 시간을 한 지도에서 비교합니다." />
   <title>언제 — 한강 지도</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/map.css" />
 </head>
 <body>
@@ -28,6 +28,10 @@
 
     <section class="map-stage" aria-label="한강공원 실제 지도">
       <div id="map"></div>
+      <div class="map-error" id="mapError" hidden>
+        <strong>지도 타일을 불러오지 못했어.</strong>
+        <span>공원 좌표와 추천 정보는 정상이며, 네트워크 연결 후 지도가 자동으로 표시된다.</span>
+      </div>
       <aside class="park-panel" id="parkPanel" aria-live="polite">
         <p class="panel-kicker">공원을 선택해</p>
         <h2>지도 위 점을 눌러봐.</h2>
@@ -38,7 +42,7 @@
     <section class="park-strip" id="parkStrip" aria-label="한강공원 빠른 선택"></section>
   </main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/vendor/leaflet/leaflet.js"></script>
   <script type="module" src="/map.js"></script>
 </body>
 </html>

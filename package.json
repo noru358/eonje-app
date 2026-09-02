@@ -16,7 +16,8 @@
     "calibrate:snapshots": "node scripts/calibrate-snapshots.mjs"
   },
   "dependencies": {
-    "leaflet": "1.9.4"
+    "leaflet": "1.9.4",
+    "sharp": "0.34.3"
   },
   "engines": {
     "node": ">=20"

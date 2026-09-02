@@ -1,4 +1,5 @@
 import { PLACES } from '/module/places.mjs';
+import { applySceneState, sceneState } from '/scene-system.js';
 
 const INTENTS=[
   {id:'general',label:'산책'},
@@ -13,7 +14,6 @@ if(!INTENTS.some(i=>i.id===intent))intent='sunset';
 const $=(id)=>document.getElementById(id);
 const scoreOf=(v)=>Number.isFinite(v?.best?.selectionScore)?v.best.selectionScore:Number.isFinite(v?.best?.score)?v.best.score:-9999;
 const fmt=(iso)=>iso?new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Seoul'}).format(new Date(iso)):'';
-const sceneStack="linear-gradient(180deg,rgba(255,255,255,.16),rgba(19,35,53,.1)),url('/assets/hanriver-spring-sunset.png'),url('/assets/hanriver-spring-sunset-v2.svg')";
 
 function renderIntents(){
   $('intentSwitch').innerHTML=INTENTS.map(i=>`<button type="button" class="${i.id===intent?'active':''}" data-id="${i.id}">${i.label}</button>`).join('');
@@ -89,17 +89,18 @@ function renderTimeCards(winner){
   const tags=['여유로운 시간','최적의 시간','야경 감상'];
   $('timeCards').innerHTML=[0,1,2].map((idx)=>{
     const s=choices[idx]||winner.verdict?.best;
+    const when=s?.time?new Date(s.time):new Date();
+    const state=sceneState(winner.place.id,when);
     const start=fmt(s?.time);
     let end='';
     if(s?.time){const d=new Date(s.time);d.setMinutes(d.getMinutes()+60);end=fmt(d.toISOString());}
-    return `<article class="time-card" style="background-image:${sceneStack}"><div class="card-kicker">${labels[idx]}</div><strong>${start||'—'}${start?' – ':''}${end||''}</strong><span class="tag">${tags[idx]}</span></article>`;
+    return `<article class="time-card liquid-glass" data-place="${state.place}" data-season="${state.season}" data-daypart="${state.daypart}"><div class="card-kicker">${labels[idx]}</div><strong>${start||'—'}${start?' – ':''}${end||''}</strong><span class="tag">${tags[idx]}</span></article>`;
   }).join('');
 }
 
 function setScene(winner){
-  document.body.dataset.place=winner.place.id;
-  const h=new Date().getHours();
-  document.body.dataset.daypart=h<11?'morning':h<17?'day':h<20?'sunset':'night';
+  const when=winner.verdict?.best?.time?new Date(winner.verdict.best.time):new Date();
+  applySceneState(document.body,winner.place.id,when);
 }
 
 async function load(){

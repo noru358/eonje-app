@@ -15,9 +15,12 @@
   <main class="app-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="언제 홈">언제</a>
-      <button class="icon-button" id="infoButton" aria-label="언제 소개">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10.7v5.3M12 7.6h.01"/></svg>
-      </button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <a class="map-out" href="/map.html">지도</a>
+        <button class="icon-button" id="infoButton" aria-label="언제 소개">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10.7v5.3M12 7.6h.01"/></svg>
+        </button>
+      </div>
     </header>
 
     <section class="question-block" aria-labelledby="questionLabel">
@@ -29,7 +32,7 @@
           <span id="placeName">여의도한강공원</span>
           <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
         </button>
-        <a class="map-out" id="mapOut" target="_blank" rel="noreferrer">지도</a>
+        <a class="map-out" id="mapOut" target="_blank" rel="noreferrer">지도에서 찾기</a>
       </div>
     </section>
 

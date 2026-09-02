@@ -15,38 +15,37 @@
     <main class="app-frame">
       <header class="topnav">
         <a class="brand" href="/">언제✦</a>
-        <nav class="nav-links" aria-label="주요 메뉴">
-          <a class="active" href="/">홈</a><a href="#recommendation">추천</a><a href="/map.html">지도</a><a href="/history.html#recent">기록</a>
-        </nav>
-        <div class="nav-actions"><a class="nav-pill liquid-glass" href="/history.html#saved">♡ 나의 저장</a></div>
+        <nav class="nav-links" aria-label="주요 메뉴"><a class="active" href="/">홈</a><a href="#recommendation">추천</a><a href="/map.html">지도</a><a href="/history.html#recent">기록</a></nav>
+        <div class="nav-actions"><a class="nav-pill liquid-glass" href="/history.html#saved">나의 저장</a></div>
       </header>
       <section class="hero">
         <div class="hero-copy">
-          <h1 id="headline">지금,<br>한강의 <span>가장 좋은 선택</span></h1>
+          <p class="hero-eyebrow">오늘 한강, 하나만 고르면</p>
+          <h1 id="headline">어디로,<br><span>언제 가면 좋을까</span></h1>
           <p id="statusCopy">날씨와 시간, 사람까지 함께 비교하고 있어요</p>
           <div class="intent-switch" id="intentSwitch" aria-label="활동 선택"></div>
         </div>
         <section class="recommendation glass liquid-glass" id="recommendation" aria-live="polite">
-          <div class="rec-top">
-            <div class="rec-place">
-              <span class="badge" id="recBadge">오늘의 추천</span>
-              <h2 id="recPlace">추천 장소를 고르는 중</h2>
-              <p class="park-signature" id="parkSignature"></p>
-              <p id="recSub">6개 한강공원의 오늘 조건을 비교하고 있어요.</p>
-            </div>
-            <div class="rec-time"><div class="time-label">가장 좋은 시간</div><div class="time-main"><strong id="recTime">--:-- – --:--</strong><span id="recMood">노을</span></div></div>
+          <div class="decision-head">
+            <div class="rec-place"><span class="badge" id="recBadge">오늘의 추천</span><h2 id="recPlace">추천 장소를 고르는 중</h2><p class="park-signature" id="parkSignature"></p><p class="decision-copy" id="recSub">6개 한강공원의 오늘 조건을 비교하고 있어요.</p></div>
+            <div class="rec-time"><div class="time-label">가장 좋은 시간</div><div class="time-main"><strong id="recTime">--:-- – --:--</strong></div><div class="time-context"><span id="recMood">산책</span><span id="seasonContext"></span></div></div>
           </div>
-          <div class="reasons" id="reasons"></div>
+          <div class="condition-strip" id="conditions" aria-label="추천 시간의 주요 조건"></div>
+          <div class="evidence-grid">
+            <section class="evidence positive"><div class="evidence-title"><span>좋아요</span><small>추천을 만든 근거</small></div><div class="evidence-list" id="positives"></div></section>
+            <section class="evidence caution"><div class="evidence-title"><span>아쉬워요</span><small>알고 가면 좋은 점</small></div><div class="evidence-list" id="cautions"></div></section>
+          </div>
           <div class="rec-actions">
-            <button id="savePlanButton" type="button" class="primary-action">이 추천 저장</button>
-            <a id="mapPlanLink" class="secondary-action" href="/map.html">지도에서 보기</a>
-            <span class="season-context" id="seasonContext"></span>
+            <button id="confirmPlanButton" type="button" class="primary-action">이 시간으로 정하기</button>
+            <button id="savePlanButton" type="button" class="quiet-action">저장</button>
+            <a id="mapPlanLink" class="quiet-action" href="/map.html">지도에서 보기</a>
+            <button id="sharePlanButton" type="button" class="icon-action" aria-label="추천 공유">공유</button>
           </div>
         </section>
-        <section class="alt-strip glass liquid-glass" aria-label="다른 추천"><div class="label">다른 선택지는?</div><div><strong id="altName">다른 공원을 비교하는 중</strong> <span id="altTime"></span></div><a id="altLink" href="/map.html" aria-label="다른 추천 지도에서 보기">›</a></section>
+        <section class="alt-strip glass liquid-glass" aria-label="다른 추천"><div class="label">차선책</div><div><strong id="altName">다른 공원을 비교하는 중</strong> <span id="altTime"></span></div><a id="altLink" href="/map.html" aria-label="다른 추천 지도에서 보기">›</a></section>
       </section>
       <section class="time-cards" id="timeCards" aria-label="시간별 대안 추천"></section>
-      <p class="footnote">장소와 실제 계절, 추천 시간에 맞춰 화면도 함께 바뀝니다.</p>
+      <p class="footnote">장소와 실제 계절, 추천 시간에 맞춰 화면도 함께 바뀝니다. · <a href="/credits.html">이미지 출처</a></p>
       <section class="error-box glass"><strong>추천을 불러오지 못했어요.</strong><p id="errorMessage">잠시 뒤 다시 시도해 주세요.</p><button id="retryButton" type="button">다시 시도</button></section>
     </main>
   </div>

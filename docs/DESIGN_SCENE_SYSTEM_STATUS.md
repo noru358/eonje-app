@@ -1,73 +1,101 @@
 # 언제 v0.6 디자인/Scene System 상태
 
-Updated: 2026-09-02 KST
+Updated: 2026-09-02 20:xx KST
 Branch: `design/visual-polish-v0.6`
 
 ## 완료
 
-- 홈 구조를 선택 시안의 hero → 메인 추천 패널 → 대안 strip → 3개 시간 카드 구조로 재구축.
-- 실제 OSM/Leaflet 지도 및 6개 공원 좌표 연동.
-- production 래스터 배경을 self-hosted asset으로 적용하고 CSP/inline-style 문제 제거.
-- 공통 `scene-system.js` 추가:
-  - 계절: spring / summer / autumn / winter
-  - 시간대: dawn / morning / day / afternoon / evening / night
-  - Asia/Seoul 시간 기준
-  - 추천된 장소와 추천 시간에 맞춰 홈/지도 scene 상태 연동
-  - 하단 시간 카드도 각 카드 시간대에 맞춰 scene state 연동
-- `scene-system.css` 추가:
-  - 장소 master asset 매핑
-  - 계절/시간대별 색온도·채도·명도·대비 리터칭
-  - liquid-glass specular sweep, blur/saturation, lift interaction
-  - `prefers-reduced-motion` 대응
-- 시안 쪽으로 typography/panel hierarchy 추가 조정:
-  - 한글 Pretendard 우선 stack
-  - 시간 숫자 tabular numerals
-  - 메인 추천 패널 폭/여백/시간 숫자/이유 아이콘 계층 강화
-- asset prestart pipeline이 확보된 scene master를 자동 다운로드.
-- 새 web-contract 테스트가 scene resolver, CSP, place/season/daypart, liquid glass, real map, verdict source를 검증하도록 업데이트.
+- 홈: hero → 메인 결정 패널 → 대안 strip → 3개 시간 선택 카드 구조.
+- 지도: 실제 OSM/Leaflet + 6개 공원 좌표 + 추천/verdict 연동.
+- production artwork를 self-hosted runtime asset으로 사용. CSP/inline-style fallback 문제 제거.
+- 실제 서울 날짜를 scene의 1순위 상태로 사용:
+  - 봄 3–5월 / 여름 6–8월 / 가을 9–11월 / 겨울 12–2월
+  - 시간대 6종: dawn/morning/day/afternoon/evening/night
+  - `theme=cherry`, `theme=fireworks` 등 이벤트 테마는 실제 계절과 별도. 벚꽃은 기본 브랜드 톤이 아니라 명시적 테마.
+- 현재 계절(가을)용 physical raster master를 봄 master와 별도 생성/후처리:
+  - 망원 autumn 완료
+  - 여의도 autumn 완료
+  - 이촌 autumn 완료
+  - 반포 autumn 완료
+  - 잠실 autumn 완료
+- 장소별 identity metadata 추가:
+  - 망원: 넓은 잔디 · 망원정/마포나루 계열의 로컬 수변
+  - 여의도: 탁 트인 수변 · 도심 이벤트/스카이라인
+  - 이촌: 갈대·억새 · 조용한 생활형 산책로
+  - 반포: 잠수교 · 세빛섬 · 달빛무지개분수
+  - 뚝섬: 자벌레(한강플플) · 액티브 수변
+  - 잠실: 롯데월드타워 · 잠실 수중보 · 도시 스카이라인
+- 메인 패널 2차 deslop:
+  - 작은 텍스트 확대
+  - 패널 내부 dead-space 축소
+  - 장소 signature 추가
+  - 유리 투명도 소폭 증가
+  - 저장 / 지도에서 보기 action row 추가
+  - 실제 계절·시간 context 표시
+- liquid-glass interaction:
+  - lift만이 아니라 specular sweep, blur/saturation, border/depth 변화
+  - reduced-motion 대응
+- 실제 기능 추가:
+  - 추천 저장(localStorage)
+  - 저장 취소
+  - 최근 본 추천 자동 기록
+  - `history.html`에서 나의 저장 / 최근 본 추천 확인 및 최근기록 삭제
+  - 홈↔지도↔기록 navigation 연결
+  - 지도 추천 패널에서도 저장 가능
+- 자동 web contract QC가 season/theme/place identity/save/history/map/verdict source를 검사.
+- 최신 GitHub Actions `npm test` 성공.
 
-## 현재 확보된 장소 master
+## 현재 asset coverage
 
-- 공통/base spring sunset: 완료
-- 망원한강공원 spring master: 완료
-- 여의도한강공원 spring master: 완료
-- 이촌한강공원 spring master: 완료
-- 반포한강공원 spring master: 완료
-- 잠실한강공원 spring master: 완료
-- 뚝섬한강공원 spring master: 미완료
+### Spring native masters
+- 망원 ✅
+- 여의도 ✅
+- 이촌 ✅
+- 반포 ✅
+- 잠실 ✅
+- 뚝섬 ❌
+
+### Autumn physical masters
+- 망원 ✅
+- 여의도 ✅
+- 이촌 ✅
+- 반포 ✅
+- 잠실 ✅
+- 뚝섬 ❌
+
+가을 asset은 단순 CSS hue-rotate가 아니라 별도 PNG 파일이며 9–11월에 우선 사용한다. 시간대는 해당 계절 master에 조명/명암 retouch를 적용한다.
 
 ## 미완료 / 실제 블로커
 
-### 1. 계절별 실제 master 이미지
-목표는 6 parks × 4 seasons = 24 seasonal masters이며, 시간대 6종은 각 seasonal master에 일관된 retouch를 적용해 144 scene 조합을 만든다.
+### 1. 뚝섬 native scene
+이미지 생성 workspace credits 소진으로 뚝섬 native master 생성 불가. 현재 generic/base fallback. 뚝섬은 자벌레/액티브 수변 identity를 native artwork로 재생성해야 한다.
 
-현재 이미지 생성 workspace credits가 소진되어 신규 생성이 차단됨:
-- plan: free/private workspace
-- usable credits: 생성 시점 기준 사실상 소진
-- unlimited allowance: unavailable
-- 결과: spring 5 park masters까지만 신규 확보. 뚝섬 및 summer/autumn/winter masters는 생성 불가.
+### 2. Summer / Winter native seasonal masters
+현재 summer/winter는 장소 master에 계절 retouch를 적용. 최종 품질 목표는 장소별 native seasonal master.
 
-코드는 144조합을 이미 처리한다. 실제 master가 없는 계절은 현재 장소 spring master(또는 base) 위에 seasonal/daypart retouch를 적용한다. 향후 이미지 파일만 추가하고 scene mapping을 갱신하면 레이아웃/판정 로직 수정 없이 교체 가능.
+### 3. Autumn native redraw
+현재 autumn 5종은 spring artwork에서 핑크/벚꽃 계열을 제거하고 금빛/저채도 녹색 계열로 physical retouch한 별도 raster다. 현재 계절 대응에는 사용 가능하지만, 장기적으로는 낙엽/억새/계절 식생 자체가 다시 그려진 native autumn illustration이 더 좋다.
 
-### 2. Pretendard webfont self-hosting
-현재 CSS는 `Pretendard Variable` local font 우선 + 시스템 한글 font fallback을 사용한다. 외부 font CDN을 새 runtime dependency로 만들지 않기 위해 webfont binary 다운로드는 아직 추가하지 않았다. 실제 사용자 기기에서 Pretendard가 없으면 Apple SD Gothic Neo / Malgun Gothic 등으로 fallback된다.
+### 4. Pretendard webfont self-hosting
+현재 local Pretendard 우선 + OS 한글 font fallback. font binary는 저장소에 포함하지 않음.
 
-### 3. Visual/browser QC
-자동 계약 테스트는 기능/구조/CSP/scene mapping을 검증하지만, 시안과의 픽셀·미감 차이는 사람의 최종 브라우저 QC가 필요하다.
+### 5. Visual/browser QC
+자동 테스트는 구조·상태·기능 회귀를 잡지만 시안 대비 미감은 사용자 브라우저 최종검수 필요.
 
-## 다음 우선순위
+## 다음 제품 우선순위
 
-1. 사용자 최종검수: 홈/지도 캡처 기준 spacing, typography, liquid-glass 강도 조절.
-2. 이미지 생성 credits 확보 후 뚝섬 spring + 18개 summer/autumn/winter masters 생성.
-3. 각 seasonal master를 scene asset pipeline에 등록.
-4. 최종 Render staging QC 후 merge/deploy 결정.
+1. 사용자 브라우저 QC: 계절감, 패널 밀도, typography, liquid-glass 강도.
+2. 메인 패널 v3: `좋아요 / 아쉬워요` compact evidence와 상황별 caveat를 verdict 데이터 구조에 맞춰 추가 여부 검토.
+3. 저장한 계획에 알림/캘린더 연동은 별도 권한/외부 integration이 필요하므로 staging 이후 검토.
+4. 뚝섬 + native summer/winter/autumn artwork 보강.
+5. Render staging → 실제 URL QC → merge/deploy 결정.
 
 ## 완료 판단 기준
 
-- 장소 선택/추천 변경 시 장소 scene이 실제로 바뀜.
-- 추천 시간/시간 카드에 따라 daypart가 바뀜.
-- 월에 따라 season state가 바뀜.
-- 지도 선택도 동일 scene resolver를 사용함.
-- CSP에 의해 artwork가 silently fallback하지 않음.
-- UI hover가 단순 translate가 아니라 liquid-glass highlight/blur/depth 변화까지 포함함.
-- `npm test` / GitHub Actions가 통과함.
+- 실제 월이 계절을 결정하고, 벚꽃은 이벤트 테마일 때만 강하게 등장.
+- 장소가 바뀌면 화면의 landmark/identity 문구와 scene이 함께 바뀜.
+- 추천 시간이 바뀌면 daypart가 바뀜.
+- 홈/지도 모두 같은 scene resolver 사용.
+- 저장/기록이 실제로 작동하고 새로고침 후 유지됨.
+- CSP/asset 실패가 조용히 오래된 SVG로 fallback하지 않음.
+- `npm test` / GitHub Actions 통과.

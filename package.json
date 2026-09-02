@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "node scripts/fetch-design-assets.mjs",
     "start": "node server.mjs",
+    "predev": "node scripts/fetch-design-assets.mjs",
     "dev": "node server.mjs",
     "test": "node --test",
     "check": "node --test",

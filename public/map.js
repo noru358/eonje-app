@@ -33,9 +33,9 @@ function scoreOf(v){return Number.isFinite(v?.best?.selectionScore)?v.best.selec
 function markerIcon(place,active=false){
   return L.divIcon({
     className:'',
-    html:`<div class="marker-shell ${active?'active':''}"><div class="marker-pin"></div><div class="marker-label">${place.shortName}</div></div>`,
-    iconSize:[120,42],
-    iconAnchor:[16,32]
+    html:`<div class="park-marker-wrap ${active?'active':''}"><div class="park-marker-label">${place.shortName}</div><div class="park-marker"></div></div>`,
+    iconSize:[110,58],
+    iconAnchor:[55,54]
   });
 }
 function setActiveMarker(id){

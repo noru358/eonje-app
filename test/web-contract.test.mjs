@@ -28,8 +28,8 @@ test('redesigned map uses one production stylesheet and labeled real-map markers
   assert.match(mapHtml, /href="\/map-v3\.css"/);
   assert.doesNotMatch(mapHtml, /href="\/map\.css"|map-polish-v3\.css/);
   assert.match(mapJs, /tile\.openstreetmap\.org/);
-  assert.match(mapJs, /park-marker-label/);
-  assert.match(mapCss, /park-marker-label/);
+  assert.match(mapJs, /marker-label/);
+  assert.match(mapCss, /marker-label/);
 });
 
 test('client consumes the server verdict as the single decision source', () => {

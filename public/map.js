@@ -10,13 +10,29 @@ const INTENTS = [
 let currentIntent = localStorage.getItem('eonje.intent') || 'general';
 let currentPlace = new URL(location.href).searchParams.get('place') || localStorage.getItem('eonje.place') || 'yeouido';
 const markers = new Map();
+const mapError = document.getElementById('mapError');
+
+if (!globalThis.L) {
+  mapError.hidden = false;
+  mapError.querySelector('strong').textContent = '지도 엔진을 불러오지 못했어.';
+  throw new Error('Leaflet failed to load');
+}
 
 const map = L.map('map', { zoomControl:false, attributionControl:true }).setView([37.5288,126.997],12);
 L.control.zoom({position:'topright'}).addTo(map);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom:19,
   attribution:'&copy; OpenStreetMap contributors'
-}).addTo(map);
+});
+let tileLoaded = false;
+tileLayer.on('tileload',()=>{
+  tileLoaded = true;
+  mapError.hidden = true;
+});
+tileLayer.on('tileerror',()=>{
+  if (!tileLoaded) mapError.hidden = false;
+});
+tileLayer.addTo(map);
 
 function markerIcon(active=false){
   return L.divIcon({
@@ -96,3 +112,4 @@ map.fitBounds(bounds.pad(.12),{padding:[28,28]});
 renderIntents();
 renderStrip();
 selectPark(currentPlace,{pan:false});
+setTimeout(()=>map.invalidateSize(),0);

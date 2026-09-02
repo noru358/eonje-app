@@ -13,6 +13,7 @@ if(!INTENTS.some(i=>i.id===intent))intent='sunset';
 const $=(id)=>document.getElementById(id);
 const scoreOf=(v)=>Number.isFinite(v?.best?.selectionScore)?v.best.selectionScore:Number.isFinite(v?.best?.score)?v.best.score:-9999;
 const fmt=(iso)=>iso?new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Seoul'}).format(new Date(iso)):'';
+const sceneStack="linear-gradient(180deg,rgba(255,255,255,.16),rgba(19,35,53,.1)),url('/assets/hanriver-spring-sunset.png'),url('/assets/hanriver-spring-sunset-v2.svg')";
 
 function renderIntents(){
   $('intentSwitch').innerHTML=INTENTS.map(i=>`<button type="button" class="${i.id===intent?'active':''}" data-id="${i.id}">${i.label}</button>`).join('');
@@ -49,7 +50,8 @@ function reasonIcon(reason){
 
 function renderWinner(winner){
   const {place,verdict,data}=winner;
-  $('recBadge').textContent=data?.mode==='live'?'✦ 오늘의 추천':'✦ 오늘의 추천 · 데모';
+  const quality=data?.quality?.state;
+  $('recBadge').textContent=data?.mode!=='live'?'✦ 오늘의 추천 · 데모':quality==='stale'?'✦ 오늘의 추천 · 지연':'✦ 오늘의 추천';
   $('recPlace').textContent=place.name;
   $('recSub').textContent=verdict.subhead||verdict.headline||'오늘 조건을 함께 비교했어요.';
   $('recTime').textContent=verdict.windowLabel||'오늘은 패스';
@@ -90,7 +92,7 @@ function renderTimeCards(winner){
     const start=fmt(s?.time);
     let end='';
     if(s?.time){const d=new Date(s.time);d.setMinutes(d.getMinutes()+60);end=fmt(d.toISOString());}
-    return `<article class="time-card"><div class="card-kicker">${labels[idx]}</div><strong>${start||'—'}${start?' – ':''}${end||''}</strong><span class="tag">${tags[idx]}</span></article>`;
+    return `<article class="time-card" style="background-image:${sceneStack}"><div class="card-kicker">${labels[idx]}</div><strong>${start||'—'}${start?' – ':''}${end||''}</strong><span class="tag">${tags[idx]}</span></article>`;
   }).join('');
 }
 
@@ -109,7 +111,8 @@ async function load(){
     if(!results.length)throw new Error('no verdicts');
     const winner=chooseWinner(results);
     renderWinner(winner);renderAlt(results,winner);renderTimeCards(winner);setScene(winner);
-    $('statusCopy').textContent='오늘의 날씨와 시간, 사람까지 고려했어요';
+    const quality=winner.data?.quality?.state;
+    $('statusCopy').textContent=winner.data?.mode!=='live'?'현재 화면은 데모 데이터로 동작 중이에요':quality==='stale'?'일부 실시간 데이터가 지연되어 표시되고 있어요':'오늘의 날씨와 시간, 사람까지 고려했어요';
     document.body.className='ready';
   }catch(error){
     console.error(error);

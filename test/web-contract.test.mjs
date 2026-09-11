@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
-const home=await readFile(new URL('../public/home-v2.js',import.meta.url),'utf8');
-const homeCss=await readFile(new URL('../public/home-v4.css',import.meta.url),'utf8');
+const home=await readFile(new URL('../public/home.js',import.meta.url),'utf8');
+const homeCss=await readFile(new URL('../public/home.css',import.meta.url),'utf8');
 const sceneJs=await readFile(new URL('../public/scene-system.js',import.meta.url),'utf8');
 const sceneCss=await readFile(new URL('../public/scene-system.css',import.meta.url),'utf8');
 const storage=await readFile(new URL('../public/storage.js',import.meta.url),'utf8');
@@ -30,7 +30,7 @@ test('park identity metadata is surfaced in home and map',()=>{assert.match(home
 
 test('save recent and confirmed outing are real local features',()=>{assert.match(storage,/eonje\.saved\.v1/);assert.match(storage,/eonje\.recent\.v1/);assert.match(storage,/eonje\.confirmed\.v1/);assert.match(home,/confirmPlan\(/);assert.match(home,/navigator\.share/);assert.match(historyHtml,/id="confirmedList"/);assert.match(historyJs,/getConfirmed/);assert.match(historyJs,/clearConfirmed/);});
 
-test('map keeps real tiles, evidence, confirmation and scene selection state',()=>{assert.match(mapHtml,/map-v5-polish\.css/);assert.match(mapJs,/tile\.openstreetmap\.org/);assert.match(mapJs,/park-marker-label/);assert.match(mapJs,/map-conditions/);assert.match(mapJs,/map-evidence/);assert.match(mapJs,/data-confirm/);assert.match(mapJs,/applySceneState\(document\.body,place\.id/);});
+test('map keeps real tiles, evidence, confirmation and scene selection state',()=>{assert.match(mapHtml,/map\.css/);assert.match(mapJs,/tile\.openstreetmap\.org/);assert.match(mapJs,/park-marker-label/);assert.match(mapJs,/map-conditions/);assert.match(mapJs,/map-evidence/);assert.match(mapJs,/data-confirm/);assert.match(mapJs,/applySceneState\(document\.body,place\.id/);});
 
 test('client consumes server verdict as the single decision source',()=>{assert.match(home,/\/api\/verdict\?place=/);assert.match(mapJs,/\/api\/verdict\?place=/);assert.doesNotMatch(home+mapJs,/makeVerdict/);});
 

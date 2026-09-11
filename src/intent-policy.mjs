@@ -118,11 +118,17 @@ export function decorateIntentVerdict(verdict, intentInput, sunset = null) {
     intentReason = { icon:'sun', title:'노을 타이밍을 우선함', detail:`일몰 ${timeLabel(sunset)}` };
   }
 
-  if (intentReason && !reasons.some((r) => r.title === intentReason.title)) reasons.unshift(intentReason);
+  // One reason per evidence axis. The intent reason is the more specific
+  // statement about that axis, so it replaces a generic one (e.g. the sunset
+  // intent must not print both "노을 타이밍을 우선함" and "해질 무렵과 겹침",
+  // which carry the same icon and the same 일몰 detail).
+  const merged = intentReason
+    ? [intentReason, ...reasons.filter((r) => r.icon !== intentReason.icon && r.title !== intentReason.title)]
+    : reasons;
   return {
     ...verdict,
     intent,
     subhead:`${label} 기준 · ${verdict.subhead}`,
-    reasons:reasons.slice(0, 3)
+    reasons:merged.slice(0, 3)
   };
 }

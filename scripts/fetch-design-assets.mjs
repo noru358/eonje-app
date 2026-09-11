@@ -38,7 +38,15 @@ async function ensureDerived(item){const target=join(ROOT,`public/assets/scenes/
   await writeFile(target,out);return{status:'derived',width:1600,height:900,size:out.length};
 }
 
-const baseMeta=await ensurePng(BASE);console.log(`design base ${baseMeta.status} → ${baseMeta.width}x${baseMeta.height} sha256:${baseMeta.hash.slice(0,12)}`);
+// This script runs as `prestart`, so it must never be the reason the server
+// fails to boot. Every source here is a third-party URL that can 404, rate
+// limit, or simply be unreachable offline; the scene layer degrades to CSS
+// gradients without them, which is a cosmetic loss, not an outage.
+let baseReady=0;
+try{const baseMeta=await ensurePng(BASE);baseReady=1;console.log(`design base ${baseMeta.status} → ${baseMeta.width}x${baseMeta.height} sha256:${baseMeta.hash.slice(0,12)}`)}
+catch(error){console.warn(`design base unavailable → ${BASE.path}: ${error.message}`)}
 let ready=0;for(const item of GENERATED){try{const meta=await ensurePng(item);ready++;console.log(`spring scene ${meta.status} → ${item.path}`)}catch(error){console.warn(`spring scene unavailable → ${item.path}: ${error.message}`)}}
 let autumnReady=0;for(const item of AUTUMN_SOURCES){try{const meta=await ensureDerived(item);autumnReady++;console.log(`autumn scene ${meta.status} → ${item.place}/${item.file}`)}catch(error){console.warn(`autumn scene unavailable → ${item.place}/${item.file}: ${error.message}`)}}
-console.log(`scene assets ready → spring ${ready}/${GENERATED.length}, real-source autumn ${autumnReady}/${AUTUMN_SOURCES.length}; summer/winter native masters remain pending`);
+console.log(`scene assets ready → base ${baseReady}/1, spring ${ready}/${GENERATED.length}, real-source autumn ${autumnReady}/${AUTUMN_SOURCES.length}; summer/winter native masters remain pending`);
+if(!baseReady&&!ready&&!autumnReady)console.warn('no scene asset could be fetched or verified; the app will start with gradient-only scenes');
+process.exitCode=0;

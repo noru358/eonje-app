@@ -1,3 +1,4 @@
 apply uploaded eonje-v0.6.4-cleanup.patch
 sha256=635e1f874e3afef4e81b52fd05c46289af1f9a42915b83b93376b3ed7a185a3e
 base=1056725c02e6d9c52a24539de8565e41d7b261ef
+retry=2

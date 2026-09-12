@@ -1,17 +1,27 @@
 {
   "name": "eonje-app",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "node scripts/fetch-design-assets.mjs",
     "start": "node server.mjs",
+    "predev": "node scripts/fetch-design-assets.mjs",
     "dev": "node server.mjs",
     "test": "node --test",
     "check": "node --test",
+    "qc:browser": "node scripts/browser-qc.mjs",
     "qc:live": "node scripts/live-qc.mjs",
     "qc:live:file": "node scripts/live-qc.mjs --output live-qc.json",
     "qc:live:auto": "node scripts/run-live-qc.mjs",
     "calibrate:snapshots": "node scripts/calibrate-snapshots.mjs"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "sharp": "0.34.3"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
   },
   "engines": {
     "node": ">=20"

@@ -7,3 +7,7 @@ Thumbs.db
 data/snapshots/
 *.log
 live-qc*.json
+
+# Scene masters are fetched/derived by scripts/fetch-design-assets.mjs.
+public/assets/scenes/
+public/assets/*.png

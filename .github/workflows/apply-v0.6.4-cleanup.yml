@@ -1,0 +1,88 @@
+name: apply-v0.6.4-cleanup
+
+on:
+  push:
+    branches:
+      - ops/apply-v0.6.4-cleanup
+    paths:
+      - .apply/READY
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout payload branch
+        uses: actions/checkout@v4
+        with:
+          ref: ops/apply-v0.6.4-cleanup
+          path: payload
+
+      - name: Checkout exact target base
+        uses: actions/checkout@v4
+        with:
+          ref: design/visual-polish-v0.6
+          fetch-depth: 0
+          path: work
+
+      - name: Reconstruct and verify uploaded patch
+        shell: bash
+        run: |
+          cat payload/.apply/patch.xz.b64.part* | base64 -d | xz -d > /tmp/eonje-v0.6.4-cleanup.patch
+          echo "635e1f874e3afef4e81b52fd05c46289af1f9a42915b83b93376b3ed7a185a3e  /tmp/eonje-v0.6.4-cleanup.patch" | sha256sum -c -
+
+      - name: Apply the five patch commits with git am
+        working-directory: work
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "1056725c02e6d9c52a24539de8565e41d7b261ef"
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+          git am --committer-date-is-author-date /tmp/eonje-v0.6.4-cleanup.patch
+          test "$(git rev-list --count 1056725c02e6d9c52a24539de8565e41d7b261ef..HEAD)" -eq 5
+          test "$(git log -5 --format=%ae | sort -u)" = "noreply@anthropic.com"
+          printf '%s\n' "$(git log -5 --format='%h %s')"
+
+      - name: Point Render at the patched design branch
+        working-directory: work
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('render.yaml')
+          s = p.read_text(encoding='utf-8')
+          old = 'branch: feat/live-data-v0.6'
+          new = 'branch: design/visual-polish-v0.6'
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one {old!r}, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add render.yaml
+          git commit -m "deploy: point Render at visual-polish v0.6"
+
+      - name: Install and test
+        working-directory: work
+        shell: bash
+        run: |
+          npm ci
+          npm test
+
+      - name: Verify final state
+        working-directory: work
+        shell: bash
+        run: |
+          node -e "const p=require('./package.json'); if(p.version!=='0.6.4') process.exit(1); console.log('version',p.version)"
+          grep -Fxq '    branch: design/visual-polish-v0.6' render.yaml
+          git status --porcelain=v1
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Push tested history to design branch
+        working-directory: work
+        shell: bash
+        run: |
+          git push origin HEAD:design/visual-polish-v0.6

@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    branch: feat/live-data-v0.6
+    branch: design/visual-polish-v0.6
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
